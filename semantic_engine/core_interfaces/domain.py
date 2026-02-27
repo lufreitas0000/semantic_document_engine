@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from uuid import UUID
 
 @dataclass(frozen=True)
-class Document:
+class DocumentMetadata:
     """
     Core domain entity representing an academic paper.
 

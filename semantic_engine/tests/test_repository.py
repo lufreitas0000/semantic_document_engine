@@ -8,7 +8,7 @@ for instantaneous unit testing of domain logic.
 
 import pytest
 from uuid import uuid4, UUID
-from semantic_engine.core_interfaces.domain import Document
+from semantic_engine.core_interfaces.domain import DocumentMetadata
 from semantic_engine.core_interfaces.repository import DocumentRepository
 
 class FakeRepository:
@@ -17,12 +17,12 @@ class FakeRepository:
     Uses a Python dict (a C-level Hash Map) for O(1) lookups.
     """
     def __init__(self) -> None:
-        self._documents: dict[UUID, Document] = {}
+        self._documents: dict[UUID, DocumentMetadata] = {}
 
-    def add(self, document: Document) -> None:
+    def add(self, document: DocumentMetadata) -> None:
         self._documents[document.id] = document
 
-    def get(self, document_id: UUID) -> Document | None:
+    def get(self, document_id: UUID) -> DocumentMetadata | None:
         return self._documents.get(document_id)
 
 def test_fake_repository_satisfies_protocol() -> None:
@@ -31,7 +31,7 @@ def test_fake_repository_satisfies_protocol() -> None:
     mypy will fail before this test ever runs.
     """
     repo: DocumentRepository = FakeRepository()
-    doc = Document(id=uuid4(), title="Quantum Gravity", abstract="A short theory.")
+    doc = DocumentMetadata(id=uuid4(), title="Quantum Gravity", abstract="A short theory.")
 
     repo.add(doc)
     retrieved_doc = repo.get(doc.id)
