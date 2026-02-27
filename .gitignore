@@ -1,0 +1,18 @@
+# Python Runtime Artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environment Isolation
+.venv/
+venv/
+ENV/
+
+# OS/IDE metadata
+.DS_Store
+.vscode/
+.idea/
+
+# Testing/Coverage
+.pytest_cache/
+coverage.xml

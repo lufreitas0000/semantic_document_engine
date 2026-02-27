@@ -1,0 +1,23 @@
+# --- API & Validation ---
+fastapi[standard]   # ASGI Web framework (includes Uvicorn server)
+pydantic            # Data validation using Python type hints
+
+# --- ML & Math ---
+numpy               # C-backed contiguous arrays
+scipy               # Required for CSR (Compressed Sparse Row) matrices for BM25
+scikit-learn        # Standard ML utilities
+
+# --- I/O & Ingestion ---
+httpx               # Async HTTP client
+pys2                # Semantic Scholar API wrapper
+
+# --- Database & Storage ---
+sqlalchemy          # Object-Relational Mapper (ORM) / SQL Toolkit
+alembic             # Database migration tool (tracks schema changes as a DAG)
+psycopg2-binary     # PostgreSQL C-adapter
+pgvector            # Python client for Postgres HNSW vector indices
+
+# --- Dev & Testing ---
+pytest              # TDD Test runner
+mypy                # Static type checker
+pip-tools           # Compiles .in to deterministic .txt
