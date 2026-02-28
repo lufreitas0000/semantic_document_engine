@@ -4,16 +4,19 @@ Ensures that the context manager correctly evaluates commit and rollback paths.
 """
 import pytest
 from uuid import uuid4
+from typing import Self
+
 from semantic_engine.core_interfaces.domain import DocumentMetadata
+from semantic_engine.core_interfaces.repository import DocumentRepository
 from semantic_engine.tests.test_repository import FakeRepository
 
 class FakeUnitOfWork:
     """    In-memory simulation of a database transaction.    """
     def __init__(self) -> None:
-        self.documents = FakeRepository()
+        self.documents: DocumentRepository = FakeRepository()
         self.committed = False
         self.rolled_back = False
-    def __enter__(self) -> 'FakeUnitOfWork':
+    def __enter__(self) -> Self:
         return self
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         if exc_type is not None:

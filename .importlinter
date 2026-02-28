@@ -16,3 +16,14 @@ forbidden_modules =
     fastapi
     sqlalchemy
     httpx
+
+[importlinter:contract:app_isolation]
+name = The Application layer must not know about Infrastructure
+type = forbidden
+source_modules =
+    semantic_engine.app_ingestion
+    semantic_engine.app_ml_analysis
+forbidden_modules =
+    semantic_engine.infrastructure
+    sqlalchemy
+    httpx

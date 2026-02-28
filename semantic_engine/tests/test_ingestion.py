@@ -4,7 +4,7 @@ Tests for the Semantic Scholar adapter using mock HTTP responses.
 import pytest
 import httpx
 from unittest.mock import AsyncMock, patch
-from semantic_engine.app_ingestion.semantic_scholar import SemanticScholarClient
+from semantic_engine.infrastructure.api.semantic_scholar import SemanticScholarClient
 
 # pytest needs this marker to run async functions within its event loop
 @pytest.mark.anyio
