@@ -11,12 +11,14 @@ from semantic_engine.app_ingestion.semantic_scholar import SemanticScholarClient
 async def test_fetch_papers_yields_domain_models() -> None:
     client = SemanticScholarClient()
 
+    # 1. The Setup: We define what the 'Fake' API should return
     mock_api_response = {
         "data": [
             {"title": "Attention Is All You Need", "abstract": "We propose the Transformer..."},
             {"title": "BERT", "abstract": "Language representation model..."}
         ]
     }
+
     # Construct a real httpx.Response object containing our fake data.
     # This avoids the "coroutine object has no attribute" error because
     # the response object natively handles .json() synchronously.
@@ -26,7 +28,8 @@ async def test_fetch_papers_yields_domain_models() -> None:
         request=httpx.Request("GET", "https://api.semanticscholar.org/graph/v1/paper/search")
     )
 
-    # We patch (intercept) the httpx.AsyncClient.get method at runtime.
+    # 2. The Patch: We 'hijack' the real httpx client
+    # We patch (intercept/replace) the httpx.AsyncClient.get method at runtime.
     # Instead of hitting the network, it returns our fake JSON.
     with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
         # When await client.get() is called, return our mock_response
