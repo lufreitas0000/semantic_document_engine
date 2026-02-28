@@ -1,0 +1,22 @@
+# docker-compose.yml
+version: '3.8'
+
+services:
+  database:
+    # We use the pgvector image natively to prepare for V1.2 (Dense Embeddings)
+    image: pgvector/pgvector:pg16
+    container_name: semantic_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: semantic_user
+      POSTGRES_PASSWORD: super_secret_password
+      POSTGRES_DB: semantic_engine_db
+    ports:
+      # Maps Host OS Port : Container Namespace Port
+      - "5432:5432"
+    volumes:
+      # Mounts a persistent block of disk space so data survives container restarts
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
