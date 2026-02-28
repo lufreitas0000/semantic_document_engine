@@ -1,0 +1,16 @@
+# .coveragerc
+[run]
+# Tracks branching logic (if/else paths) as well as straight lines
+branch = True
+omit =
+    # Do not track coverage for pure static Protocols
+    semantic_engine/core_interfaces/uow.py
+
+[report]
+# Tell the tracer to ignore these specific AST patterns
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    if TYPE_CHECKING:
+    # Ignore Protocol method bodies
+    \.\.\.

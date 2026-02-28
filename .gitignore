@@ -16,3 +16,4 @@ ENV/
 # Testing/Coverage
 .pytest_cache/
 coverage.xml
+.coverage

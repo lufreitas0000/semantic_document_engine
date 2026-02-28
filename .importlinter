@@ -1,6 +1,7 @@
 # .importlinter
 [importlinter]
 root_package = semantic_engine
+include_external_packages = True
 
 [importlinter:contract:core_isolation]
 name = The Core Domain must remain mathematically pure
