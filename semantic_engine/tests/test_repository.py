@@ -31,10 +31,10 @@ def test_fake_repository_satisfies_protocol() -> None:
     mypy will fail before this test ever runs.
     """
     repo: DocumentRepository = FakeRepository()
-    doc = DocumentMetadata(id=uuid4(), title="Quantum Gravity", abstract="A short theory.")
+    doc = DocumentMetadata(id=uuid4(), title="Quantum Gravity", abstract="A short theory.", embedding=[0.1, 0.2, 0.3])
 
     repo.add(doc)
-    retrieved_doc = repo.get(doc.id)
+    retrieved_doc: DocumentMetadata | None = repo.get(doc.id)
 
     assert retrieved_doc is not None
     assert retrieved_doc.title == "Quantum Gravity"

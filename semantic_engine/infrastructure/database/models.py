@@ -7,6 +7,7 @@ data transfer objects mapped to SQL tables.
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy import String, Text
 from uuid import UUID
+from pgvector.sqlalchemy import Vector  # type: ignore
 
 class Base(DeclarativeBase):
     """
@@ -24,5 +25,5 @@ class DocumentRecord(Base):
     id: Mapped[UUID] = mapped_column(primary_key=True)
     title: Mapped[str] = mapped_column(String(500))
     abstract: Mapped[str] = mapped_column(Text)
-
-    # Note: We will add pgvector's Vector type here in Version 1.2
+    # Instructs Postgres to allocate a dense 384-float array
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(384))

@@ -19,7 +19,8 @@ class SqlAlchemyDocumentRepository:
         record = DocumentRecord(
             id=document.id,
             title=document.title,
-            abstract=document.abstract
+            abstract=document.abstract,
+            embedding=document.embedding
         )
         self.session.add(record) # Appends to the Identity Map (Session Cache)
 
@@ -33,5 +34,6 @@ class SqlAlchemyDocumentRepository:
         return DocumentMetadata(
             id=record.id,
             title=record.title,
-            abstract=record.abstract
+            abstract=record.abstract,
+            embedding=list(record.embedding) if record.embedding is not None else None
         )

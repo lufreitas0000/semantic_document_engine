@@ -21,3 +21,7 @@ class DocumentMetadata:
     id: UUID
     title: str
     abstract: str
+    # The mathematical embedding of the abstract.
+    # Default is None because it is computationally expensive to calculate,
+    # so we might load documents from the DB without it if we don't need it.
+    embedding: list[float] | None = None

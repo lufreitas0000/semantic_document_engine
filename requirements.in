@@ -6,6 +6,7 @@ pydantic            # Data validation using Python type hints
 numpy               # C-backed contiguous arrays
 scipy               # Required for CSR (Compressed Sparse Row) matrices for BM25
 scikit-learn        # Standard ML utilities
+sentence-transformers # HuggingFace dense vector models
 
 # --- I/O & Ingestion ---
 httpx               # Async HTTP client
