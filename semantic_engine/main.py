@@ -13,6 +13,9 @@ from semantic_engine.core_interfaces.api import AcademicGraphPort
 from semantic_engine.infrastructure.database.uow import SqlAlchemyUnitOfWork
 from semantic_engine.infrastructure.api.semantic_scholar import SemanticScholarClient
 from semantic_engine.app_ingestion.workflows import fetch_and_store_papers
+from semantic_engine.infrastructure.ml.sentence_transformer import MiniLMEmbeddingModel
+from semantic_engine.core_interfaces.ml import TextEmbeddingPort
+from semantic_engine.app_ingestion.workflows import fetch_and_store_papers, search_papers
 
 # 1. Global Infrastructure Setup
 # The exact TCP coordinates and cryptography needed to reach the isolated Docker process.
@@ -42,6 +45,12 @@ def get_api_client() -> AcademicGraphPort:
     return SemanticScholarClient()
 # ----------------------------
 
+# Instantiate the ML model globally so weights remain in RAM
+ml_model_instance = MiniLMEmbeddingModel()
+
+def get_ml_model() -> TextEmbeddingPort:
+    return ml_model_instance
+
 # 3. The Endpoints
 # An ASGI router. It listens for HTTP POST requests at that URL.
 @app.post(path="/ingest/")
@@ -57,5 +66,31 @@ async def ingest_papers(
     try:
         count: int = await fetch_and_store_papers(query=query, api_client=api_client, uow=uow, limit=limit)
         return {"message": "Success", "papers_ingested": count, "query": query}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(object=e))
+
+
+
+@app.get(path="/search/")
+async def search_documents(
+    query: str,
+    limit: int = 5,
+    uow: AbstractUnitOfWork = Depends(get_uow),
+    ml_model: TextEmbeddingPort = Depends(get_ml_model)
+) -> dict[str, Any]:
+    """
+    Performs a Dense Vector Semantic Search against the database.
+    """
+    try:
+        results = await search_papers(query=query, ml_model=ml_model, uow=uow, limit=limit)
+
+        # Serialize the Domain Particles into JSON (excluding the massive vector payload)
+        return {
+            "query": query,
+            "results": [
+                {"id": str(doc.id), "title": doc.title, "abstract": doc.abstract}
+                for doc in results
+            ]
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(object=e))

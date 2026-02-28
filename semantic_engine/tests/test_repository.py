@@ -25,6 +25,10 @@ class FakeRepository:
     def get(self, document_id: UUID) -> DocumentMetadata | None:
         return self._documents.get(document_id)
 
+    def search_by_embedding(self, query_embedding: list[float], limit: int = 5) -> list[DocumentMetadata]:
+        docs: list[DocumentMetadata] = list(self._documents.values())
+        return docs[:limit]
+
 def test_fake_repository_satisfies_protocol() -> None:
     """
     Static analysis check: If FakeRepository does not match the Protocol,

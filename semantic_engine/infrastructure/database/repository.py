@@ -2,6 +2,7 @@
 SQLAlchemy implementation of the DocumentRepository Protocol.
 """
 from uuid import UUID
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 from semantic_engine.core_interfaces.domain import DocumentMetadata
 from semantic_engine.infrastructure.database.models import DocumentRecord
@@ -37,3 +38,25 @@ class SqlAlchemyDocumentRepository:
             abstract=record.abstract,
             embedding=list(record.embedding) if record.embedding is not None else None
         )
+
+    def search_by_embedding(self, query_embedding: list[float], limit: int = 5) -> list[DocumentMetadata]:
+        # Mathematically calculate the Cosine Distance in the Postgres engine
+        # We use type: ignore because mypy cannot read pgvector's C-extension methods
+        # a SQL SELECT  statement. mathematical instructions for across the TCP network to the PostgreSQL daemon
+        stmt = select(DocumentRecord).order_by(
+            DocumentRecord.embedding.cosine_distance(query_embedding)
+        ).limit(limit)
+
+        # when Postgres replies, it sends data back as a 2D matrix.
+        # scalars(): takes that grid and maps the columns back into your DocumentRecord Python object, yielding a flat list of objects.
+        records = self.session.scalars(stmt).all()
+
+
+        return [
+            DocumentMetadata(
+                id=r.id,
+                title=r.title,
+                abstract=r.abstract,
+                embedding=list(r.embedding) if r.embedding is not None else None
+            ) for r in records
+        ]

@@ -7,6 +7,11 @@ from semantic_engine.main import app, get_uow, get_api_client
 from semantic_engine.tests.test_uow import FakeUnitOfWork
 from semantic_engine.tests.test_workflows import FakeAcademicGraph
 
+from semantic_engine.main import get_ml_model
+from semantic_engine.tests.test_ml import FakeEmbeddingModel
+from semantic_engine.core_interfaces.domain import DocumentMetadata
+from uuid import uuid4
+
 # Instantiate a virtual browser to test the API locally
 client = TestClient(app)
 
@@ -29,4 +34,30 @@ def test_ingest_endpoint_success() -> None:
     assert fake_uow.committed is True
 
     # 4. Clean up the overrides so they don't leak into other tests
+    app.dependency_overrides.clear()
+
+
+def test_search_endpoint_success() -> None:
+    fake_uow = FakeUnitOfWork()
+    fake_ml = FakeEmbeddingModel()
+
+    doc = DocumentMetadata(
+        id=uuid4(),
+        title="Vector Search Paper",
+        abstract="Math",
+        embedding=fake_ml.embed_text("Math")
+    )
+    fake_uow.documents.add(doc)
+
+    app.dependency_overrides[get_uow] = lambda: fake_uow
+    app.dependency_overrides[get_ml_model] = lambda: fake_ml
+
+    response = client.get("/search/?query=Math&limit=5")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["query"] == "Math"
+    assert len(data["results"]) == 1
+    assert data["results"][0]["title"] == "Vector Search Paper"
+
     app.dependency_overrides.clear()
