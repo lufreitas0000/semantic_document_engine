@@ -19,5 +19,16 @@ jobs:
         python -m pip install --upgrade pip
         pip install pip-tools
         pip-sync requirements.txt
-    - run: python -m mypy semantic_engine/
-    - run: python -m pytest semantic_engine/tests/
+    - name: Run Static Type Checker (mypy)
+      run: python -m mypy semantic_engine/
+
+    - name: Run Dependency Toplogy Check (import-linter)
+      run: lint-imports
+
+    - name: Run Cyclomatic Complexity Check (xenon)
+      # Fails if any block is > B (scale A-F) or average is > A
+      run: xenon --max-absolute B --max-modules B --max-average A semantic_engine/
+
+    - name: Run Unit Tests & Coverage (pytest-cov)
+      # Fails the build if coverage drops below 90%
+      run: python -m pytest --cov=semantic_engine --cov-fail-under=90 semantic_engine/tests/

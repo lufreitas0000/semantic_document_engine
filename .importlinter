@@ -1,0 +1,17 @@
+# .importlinter
+[importlinter]
+root_package = semantic_engine
+
+[importlinter:contract:core_isolation]
+name = The Core Domain must remain mathematically pure
+type = forbidden
+source_modules =
+    semantic_engine.core_interfaces
+forbidden_modules =
+    semantic_engine.infrastructure
+    semantic_engine.app_ingestion
+    semantic_engine.app_web_ui
+    semantic_engine.app_ml_analysis
+    fastapi
+    sqlalchemy
+    httpx

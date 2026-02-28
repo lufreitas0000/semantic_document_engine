@@ -21,3 +21,8 @@ pgvector            # Python client for Postgres HNSW vector indices
 pytest              # TDD Test runner
 mypy                # Static type checker
 pip-tools           # Compiles .in to deterministic .txt
+
+# --- CI/CD & Metrology ---
+pytest-cov          # Test coverage via sys.settrace
+xenon               # Cyclomatic complexity enforcement
+import-linter       # Dependency DAG validation
