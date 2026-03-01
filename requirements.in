@@ -29,4 +29,5 @@ pytest-cov          # Test coverage via sys.settrace
 xenon               # Cyclomatic complexity enforcement
 import-linter       # Dependency DAG validation
 
-
+# --- Front End ---
+streamlit           # Pure Python UI Framework

@@ -6,6 +6,8 @@
 #
 alembic==1.18.4
     # via -r requirements.in
+altair==6.0.0
+    # via streamlit
 annotated-doc==0.0.4
     # via
     #   fastapi
@@ -15,8 +17,16 @@ anyio==4.12.1
     #   httpx
     #   starlette
     #   watchfiles
+attrs==25.4.0
+    # via
+    #   jsonschema
+    #   referencing
+blinker==1.9.0
+    # via streamlit
 build==1.4.0
     # via pip-tools
+cachetools==6.2.6
+    # via streamlit
 certifi==2026.2.25
     # via
     #   httpcore
@@ -30,6 +40,7 @@ click==8.3.1
     #   import-linter
     #   pip-tools
     #   rich-toolkit
+    #   streamlit
     #   typer
     #   uvicorn
 colorama==0.4.6
@@ -64,6 +75,10 @@ fsspec==2026.2.0
     # via
     #   huggingface-hub
     #   torch
+gitdb==4.0.12
+    # via gitpython
+gitpython==3.1.46
+    # via streamlit
 greenlet==3.3.2
     # via sqlalchemy
 grimp==3.14
@@ -101,10 +116,16 @@ iniconfig==2.3.0
     # via pytest
 jinja2==3.1.6
     # via
+    #   altair
     #   fastapi
+    #   pydeck
     #   torch
 joblib==1.5.3
     # via scikit-learn
+jsonschema==4.26.0
+    # via altair
+jsonschema-specifications==2025.9.1
+    # via jsonschema
 librt==0.8.1
     # via mypy
 mako==1.3.10
@@ -125,15 +146,20 @@ mypy==1.19.1
     # via -r requirements.in
 mypy-extensions==1.1.0
     # via mypy
+narwhals==2.17.0
+    # via altair
 networkx==3.6.1
     # via torch
 numpy==2.4.2
     # via
     #   -r requirements.in
+    #   pandas
     #   pgvector
+    #   pydeck
     #   scikit-learn
     #   scipy
     #   sentence-transformers
+    #   streamlit
     #   transformers
 nvidia-cublas-cu12==12.8.4.1
     # via
@@ -176,29 +202,41 @@ nvidia-nvtx-cu12==12.8.90
     # via torch
 packaging==26.0
     # via
+    #   altair
     #   build
     #   huggingface-hub
     #   pytest
+    #   streamlit
     #   transformers
     #   wheel
+pandas==2.3.3
+    # via streamlit
 pathspec==1.0.4
     # via mypy
 pgvector==0.4.2
     # via -r requirements.in
+pillow==12.1.1
+    # via streamlit
 pip-tools==7.5.3
     # via -r requirements.in
 pluggy==1.6.0
     # via
     #   pytest
     #   pytest-cov
+protobuf==6.33.5
+    # via streamlit
 psycopg2-binary==2.9.11
     # via -r requirements.in
+pyarrow==23.0.1
+    # via streamlit
 pydantic[email]==1.10.26
     # via
     #   -r requirements.in
     #   fastapi
     #   fastapi-cloud-cli
     #   pys2
+pydeck==0.9.1
+    # via streamlit
 pygments==2.19.2
     # via
     #   pytest
@@ -215,10 +253,14 @@ pytest==9.0.2
     #   pytest-cov
 pytest-cov==7.0.0
     # via -r requirements.in
+python-dateutil==2.9.0.post0
+    # via pandas
 python-dotenv==1.2.1
     # via uvicorn
 python-multipart==0.0.22
     # via fastapi
+pytz==2025.2
+    # via pandas
 pyyaml==6.0.3
     # via
     #   huggingface-hub
@@ -228,11 +270,16 @@ pyyaml==6.0.3
     #   xenon
 radon==6.0.1
     # via xenon
+referencing==0.37.0
+    # via
+    #   jsonschema
+    #   jsonschema-specifications
 regex==2026.2.28
     # via transformers
 requests==2.32.5
     # via
     #   pys2
+    #   streamlit
     #   xenon
 rich==14.3.3
     # via
@@ -245,6 +292,10 @@ rich-toolkit==0.19.7
     #   fastapi-cloud-cli
 rignore==0.7.6
     # via fastapi-cloud-cli
+rpds-py==0.30.0
+    # via
+    #   jsonschema
+    #   referencing
 safetensors==0.7.0
     # via transformers
 scikit-learn==1.8.0
@@ -263,21 +314,33 @@ sentry-sdk==2.53.0
 shellingham==1.5.4
     # via typer
 six==1.17.0
-    # via mando
+    # via
+    #   mando
+    #   python-dateutil
+smmap==5.0.2
+    # via gitdb
 sqlalchemy==2.0.47
     # via
     #   -r requirements.in
     #   alembic
 starlette==0.50.0
     # via fastapi
+streamlit==1.54.0
+    # via -r requirements.in
 sympy==1.14.0
     # via torch
+tenacity==9.1.4
+    # via streamlit
 threadpoolctl==3.6.0
     # via scikit-learn
 tokenizers==0.22.2
     # via transformers
+toml==0.10.2
+    # via streamlit
 torch==2.10.0
     # via sentence-transformers
+tornado==6.5.4
+    # via streamlit
 tqdm==4.67.3
     # via
     #   huggingface-hub
@@ -298,6 +361,7 @@ typer-slim==0.24.0
 typing-extensions==4.15.0
     # via
     #   alembic
+    #   altair
     #   anyio
     #   fastapi
     #   grimp
@@ -305,11 +369,15 @@ typing-extensions==4.15.0
     #   import-linter
     #   mypy
     #   pydantic
+    #   referencing
     #   rich-toolkit
     #   sentence-transformers
     #   sqlalchemy
     #   starlette
+    #   streamlit
     #   torch
+tzdata==2025.3
+    # via pandas
 urllib3==2.6.3
     # via
     #   requests
@@ -324,6 +392,8 @@ uvloop==0.22.1
     # via uvicorn
 vcrpy==8.1.1
     # via -r requirements.in
+watchdog==6.0.0
+    # via streamlit
 watchfiles==1.1.1
     # via uvicorn
 websockets==16.0

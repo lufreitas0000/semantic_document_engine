@@ -11,11 +11,14 @@ from sqlalchemy.orm.session import Session
 from semantic_engine.core_interfaces.uow import AbstractUnitOfWork
 from semantic_engine.core_interfaces.api import AcademicGraphPort
 from semantic_engine.infrastructure.database.uow import SqlAlchemyUnitOfWork
-from semantic_engine.infrastructure.api.semantic_scholar import SemanticScholarClient
 from semantic_engine.app_ingestion.workflows import fetch_and_store_papers
 from semantic_engine.infrastructure.ml.sentence_transformer import MiniLMEmbeddingModel
 from semantic_engine.core_interfaces.ml import TextEmbeddingPort
 from semantic_engine.app_ingestion.workflows import fetch_and_store_papers, search_papers
+
+
+#from semantic_engine.infrastructure.api.semantic_scholar import SemanticScholarClient
+from semantic_engine.infrastructure.api.arxiv import ArxivClient
 
 # 1. Global Infrastructure Setup
 # The exact TCP coordinates and cryptography needed to reach the isolated Docker process.
@@ -42,7 +45,7 @@ def get_uow() -> AbstractUnitOfWork:
     return SqlAlchemyUnitOfWork(session_factory=SessionFactory)
 
 def get_api_client() -> AcademicGraphPort:
-    return SemanticScholarClient()
+    return ArxivClient()
 # ----------------------------
 
 # Instantiate the ML model globally so weights remain in RAM
