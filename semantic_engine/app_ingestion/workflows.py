@@ -38,7 +38,7 @@ async def search_papers(
     ml_model: TextEmbeddingPort,
     uow: AbstractUnitOfWork,
     limit: int = 5
-) -> list[DocumentMetadata]:
+) -> list[tuple[DocumentMetadata, float]]:
     """
     The orchestrator for semantic search.
     Translates text into math, and searches the database.

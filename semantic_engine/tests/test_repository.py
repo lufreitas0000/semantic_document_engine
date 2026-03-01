@@ -25,9 +25,9 @@ class FakeRepository:
     def get(self, document_id: UUID) -> DocumentMetadata | None:
         return self._documents.get(document_id)
 
-    def search_by_embedding(self, query_embedding: list[float], limit: int = 5) -> list[DocumentMetadata]:
-        docs: list[DocumentMetadata] = list(self._documents.values())
-        return docs[:limit]
+    def search_by_embedding(self, query_embedding: list[float], limit: int = 5) -> list[tuple[DocumentMetadata, float]]:
+        docs: list[DocumentMetadata] = list(self._documents.values())[:limit]
+        return [(doc, 0.0) for doc in docs]
 
 def test_fake_repository_satisfies_protocol() -> None:
     """

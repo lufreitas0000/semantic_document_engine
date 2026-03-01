@@ -39,24 +39,29 @@ class SqlAlchemyDocumentRepository:
             embedding=list(record.embedding) if record.embedding is not None else None
         )
 
-    def search_by_embedding(self, query_embedding: list[float], limit: int = 5) -> list[DocumentMetadata]:
+    def search_by_embedding(self, query_embedding: list[float], limit: int = 5) -> list[tuple[DocumentMetadata, float]]:
+        # 1. Ask Postgres to label the distance calculation as a column
+        distance_col = DocumentRecord.embedding.cosine_distance(query_embedding).label("distance") # type: ignore
+
         # Mathematically calculate the Cosine Distance in the Postgres engine
         # We use type: ignore because mypy cannot read pgvector's C-extension methods
         # a SQL SELECT  statement. mathematical instructions for across the TCP network to the PostgreSQL daemon
-        stmt = select(DocumentRecord).order_by(
-            DocumentRecord.embedding.cosine_distance(query_embedding)
-        ).limit(limit)
 
-        # when Postgres replies, it sends data back as a 2D matrix.
-        # scalars(): takes that grid and maps the columns back into your DocumentRecord Python object, yielding a flat list of objects.
-        records = self.session.scalars(stmt).all()
+        # 2. Select both the Record AND the Distance
+        stmt = select(DocumentRecord, distance_col).order_by(distance_col).limit(limit)
 
+        # 3. execute() returns raw rows instead of just objects
+        rows = self.session.execute(stmt).all()
 
+        # 4. Map row[0] (The Record) and row[1] (The Float Distance)
         return [
-            DocumentMetadata(
-                id=r.id,
-                title=r.title,
-                abstract=r.abstract,
-                embedding=list(r.embedding) if r.embedding is not None else None
-            ) for r in records
+            (
+                DocumentMetadata(
+                    id=row[0].id,
+                    title=row[0].title,
+                    abstract=row[0].abstract,
+                    embedding=list(row[0].embedding) if row[0].embedding is not None else None
+                ),
+                float(row[1])
+            ) for row in rows
         ]

@@ -57,7 +57,7 @@ with tab1:
 
                     st.subheader("Nearest Mathematical Neighbors:")
                     for paper in data["results"]:
-                        with st.expander(f"📄 {paper['title']}"):
+                        with st.expander(f"📄 {paper['title']} (Distance: {paper['distance']})"):
                             st.write(paper['abstract'])
                             st.caption(f"Internal UUID: {paper['id']}")
 

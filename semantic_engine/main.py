@@ -91,8 +91,13 @@ async def search_documents(
         return {
             "query": query,
             "results": [
-                {"id": str(doc.id), "title": doc.title, "abstract": doc.abstract}
-                for doc in results
+                {
+                    "id": str(doc.id),
+                    "title": doc.title,
+                    "abstract": doc.abstract,
+                    "distance": round(dist, 4) # Add the distance here!
+                }
+                for doc, dist in results # Unpack the tuple
             ]
         }
     except Exception as e:

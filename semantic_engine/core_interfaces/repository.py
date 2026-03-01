@@ -21,5 +21,5 @@ class DocumentRepository(Protocol):
     def get(self, document_id: UUID) -> Optional[DocumentMetadata]:
         ...
 
-    def search_by_embedding(self, query_embedding: list[float], limit: int = 5) -> list[DocumentMetadata]:
+    def search_by_embedding(self, query_embedding: list[float], limit: int = 5) -> list[tuple[DocumentMetadata, float]]:
         ...
