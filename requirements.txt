@@ -224,6 +224,7 @@ pyyaml==6.0.3
     #   huggingface-hub
     #   transformers
     #   uvicorn
+    #   vcrpy
     #   xenon
 radon==6.0.1
     # via xenon
@@ -321,12 +322,16 @@ uvicorn[standard]==0.41.0
     #   import-linter
 uvloop==0.22.1
     # via uvicorn
+vcrpy==8.1.1
+    # via -r requirements.in
 watchfiles==1.1.1
     # via uvicorn
 websockets==16.0
     # via uvicorn
 wheel==0.46.3
     # via pip-tools
+wrapt==2.1.1
+    # via vcrpy
 xenon==0.9.3
     # via -r requirements.in
 
