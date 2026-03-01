@@ -12,7 +12,7 @@ from semantic_engine.core_interfaces.uow import AbstractUnitOfWork
 from semantic_engine.core_interfaces.api import AcademicGraphPort
 from semantic_engine.infrastructure.database.uow import SqlAlchemyUnitOfWork
 from semantic_engine.app_ingestion.workflows import fetch_and_store_papers
-from semantic_engine.infrastructure.ml.sentence_transformer import MiniLMEmbeddingModel
+from semantic_engine.infrastructure.ml.sentence_transformer import HuggingFaceEmbeddingModel
 from semantic_engine.core_interfaces.ml import TextEmbeddingPort
 from semantic_engine.app_ingestion.workflows import fetch_and_store_papers, search_papers
 
@@ -49,7 +49,7 @@ def get_api_client() -> AcademicGraphPort:
 # ----------------------------
 
 # Instantiate the ML model globally so weights remain in RAM
-ml_model_instance = MiniLMEmbeddingModel()
+ml_model_instance = HuggingFaceEmbeddingModel()
 
 def get_ml_model() -> TextEmbeddingPort:
     return ml_model_instance

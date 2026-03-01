@@ -1,20 +1,29 @@
 """
 HuggingFace Sentence Transformers Adapter.
 """
+import torch
 from sentence_transformers import SentenceTransformer
 from semantic_engine.core_interfaces.ml import TextEmbeddingPort
 
-class MiniLMEmbeddingModel:
-    """
-    Implements the TextEmbeddingPort using a pre-trained local neural network.
-    """
-    def __init__(self, model_name: str = "all-MiniLM-L6-v2"):
         # The first time this runs, it downloads ~80MB of weights to ~/.cache/huggingface
         # Subsequent runs load it directly from local disk into RAM.
-        self.model = SentenceTransformer(model_name)
+        # .encode() passes the text through the neural network and returns a numpy array
+        # Convert the numpy array back to standard Python floats for our Domain Protocol
+
+class HuggingFaceEmbeddingModel(TextEmbeddingPort):
+    def __init__(self, model_name: str = "all-MiniLM-L6-v2", device: str = None):
+        # 1. Hardware Detection
+        if device is None:
+            self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        else:
+            self.device = device
+
+        print(f"Loading {model_name} onto {self.device.upper()}...")
+
+        # 2. Load model into RAM or VRAM
+        self.model = SentenceTransformer(model_name, device=self.device)
 
     def embed_text(self, text: str) -> list[float]:
-        # .encode() passes the text through the neural network and returns a numpy array
-        vector = self.model.encode(text)
-        # Convert the numpy array back to standard Python floats for our Domain Protocol
-        return vector.tolist()
+        # The model automatically executes the math on the target device
+        embedding = self.model.encode(text)
+        return embedding.tolist()
