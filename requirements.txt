@@ -99,6 +99,7 @@ httpx==0.28.1
     #   fastapi
     #   fastapi-cloud-cli
     #   huggingface-hub
+    #   respx
 huggingface-hub==1.5.0
     # via
     #   sentence-transformers
@@ -281,6 +282,8 @@ requests==2.32.5
     #   pys2
     #   streamlit
     #   xenon
+respx==0.22.0
+    # via -r requirements.in
 rich==14.3.3
     # via
     #   import-linter
