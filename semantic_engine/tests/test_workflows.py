@@ -9,6 +9,7 @@ from semantic_engine.tests.test_repository import FakeRepository
 from semantic_engine.core_interfaces.domain import DocumentMetadata
 from semantic_engine.tests.test_uow import FakeUnitOfWork
 from semantic_engine.app_ingestion.workflows import fetch_and_store_papers
+from semantic_engine.tests.test_ml import FakeEmbeddingModel
 
 class FakeAcademicGraph:
     """An in-memory fake that yields predefined particles."""
@@ -22,9 +23,10 @@ class FakeAcademicGraph:
 async def test_fetch_and_store_workflow_orchestrates_correctly() -> None:
     fake_api = FakeAcademicGraph()
     fake_uow = FakeUnitOfWork()
+    fake_ml = FakeEmbeddingModel()
 
     # Execute the pure workflow
-    count = await fetch_and_store_papers("Quantum", fake_api, fake_uow)
+    count = await fetch_and_store_papers("Quantum", fake_api, fake_uow,ml_model=fake_ml,limit=2)
 
     assert count == 2
 
@@ -35,3 +37,7 @@ async def test_fetch_and_store_workflow_orchestrates_correctly() -> None:
     # Verify the documents were actually passed to the repository and committed
     assert len(fake_uow.documents._documents) == 2
     assert fake_uow.committed is True
+
+    saved_docs = list(fake_uow.documents._documents.values())
+    assert saved_docs[0].embedding is not None
+    assert len(saved_docs[0].embedding) == 384

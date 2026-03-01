@@ -48,8 +48,12 @@ class SqlAlchemyDocumentRepository:
         # a SQL SELECT  statement. mathematical instructions for across the TCP network to the PostgreSQL daemon
 
         # 2. Select both the Record AND the Distance
-        stmt = select(DocumentRecord, distance_col).order_by(distance_col).limit(limit)
-
+        stmt = (
+            select(DocumentRecord, distance_col)
+            .where(DocumentRecord.embedding.is_not(None))
+            .order_by(distance_col)
+            .limit(limit)
+        )
         # 3. execute() returns raw rows instead of just objects
         rows = self.session.execute(stmt).all()
 

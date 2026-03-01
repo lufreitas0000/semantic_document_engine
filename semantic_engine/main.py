@@ -63,11 +63,12 @@ async def ingest_papers(
     # FastAPI will automatically run get_uow() and get_api_client() and inject them
     # When a web request arrives, FastAPI pauses, executes get_uow(), takes the resulting SqlAlchemyUnitOfWork, and injects it into the uow variable.
     uow: AbstractUnitOfWork = Depends(get_uow),
-    api_client: AcademicGraphPort = Depends(get_api_client)
+    api_client: AcademicGraphPort = Depends(get_api_client),
+    ml_model: TextEmbeddingPort = Depends(get_ml_model)
 ) -> dict[str, Any]:
     """Triggers the Ingestion Workflow."""
     try:
-        count: int = await fetch_and_store_papers(query=query, api_client=api_client, uow=uow, limit=limit)
+        count: int = await fetch_and_store_papers(query=query, api_client=api_client, uow=uow, ml_model=ml_model, limit=limit)
         return {"message": "Success", "papers_ingested": count, "query": query}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(object=e))

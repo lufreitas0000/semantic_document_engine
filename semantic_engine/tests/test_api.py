@@ -3,13 +3,14 @@ Integration Tests for the FastAPI endpoints.
 """
 from fastapi.testclient import TestClient
 from httpx import Response
-from semantic_engine.main import app, get_uow, get_api_client
+
+
 from semantic_engine.tests.test_uow import FakeUnitOfWork
 from semantic_engine.tests.test_workflows import FakeAcademicGraph
-
-from semantic_engine.main import get_ml_model
 from semantic_engine.tests.test_ml import FakeEmbeddingModel
 from semantic_engine.core_interfaces.domain import DocumentMetadata
+from semantic_engine.main import app, get_uow, get_api_client, get_ml_model
+
 from uuid import uuid4
 
 # Instantiate a virtual browser to test the API locally
@@ -18,8 +19,10 @@ client = TestClient(app)
 def test_ingest_endpoint_success() -> None:
     # 1. Override the physical dependencies with our RAM-based Fakes
     fake_uow = FakeUnitOfWork()
+    fake_ml = FakeEmbeddingModel()
     app.dependency_overrides[get_uow] = lambda: fake_uow
     app.dependency_overrides[get_api_client] = lambda: FakeAcademicGraph()
+    app.dependency_overrides[get_ml_model] = lambda: fake_ml
 
     # 2. Simulate an HTTP POST request
     response: Response = client.post("/ingest/?query=Quantum&limit=2")

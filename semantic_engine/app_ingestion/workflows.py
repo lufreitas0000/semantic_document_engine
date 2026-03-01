@@ -4,6 +4,8 @@ It imports the Interfaces, but knows nothing about HTTP or SQL.
 Coordinates the fetching of data from API ports and the storage of data
 via the Unit of Work. Contains ZERO infrastructure logic.
 """
+from dataclasses import replace
+
 from semantic_engine.core_interfaces.api import AcademicGraphPort
 from semantic_engine.core_interfaces.uow import AbstractUnitOfWork
 from semantic_engine.core_interfaces.ml import TextEmbeddingPort
@@ -13,6 +15,7 @@ async def fetch_and_store_papers(
     query: str,
     api_client: AcademicGraphPort, # Dependency Injection (Port)
     uow: AbstractUnitOfWork,       # Dependency Injection (Port)
+    ml_model: TextEmbeddingPort,
     limit: int = 5
 ) -> int:
     """
@@ -21,11 +24,11 @@ async def fetch_and_store_papers(
     """
     papers_saved = 0
 
-    # 1. Ask the Port for data
     async for document in api_client.fetch_papers_by_query(query, limit):
-        # 2. Open an atomic database transaction
+        vector = ml_model.embed_text(document.abstract)
+        embedded_document = replace(document, embedding=vector)
         with uow:
-            uow.documents.add(document)
+            uow.documents.add(embedded_document)
             uow.commit()
 
         papers_saved += 1
