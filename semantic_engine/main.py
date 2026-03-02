@@ -23,7 +23,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 # --- Database & ML Initialization ---
-DATABASE_URL = "postgresql+psycopg2://test:test@localhost:5432/semantic_db"
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise ValueError("DATABASE_URL environment variable is missing!")
 engine = create_engine(DATABASE_URL)
 SessionFactory = sessionmaker(bind=engine)
 
