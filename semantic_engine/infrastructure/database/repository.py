@@ -28,9 +28,7 @@ class SqlAlchemyDocumentRepository:
 
 
     def search_by_embedding(self, query_embedding: list[float], limit: int = 5) -> list[tuple[DocumentMetadata, float]]:
-        # 1. Dynamic Hardware Routing based on Vector Dimensionality
         vector_length = len(query_embedding)
-
         if vector_length == 384:
             # Route to the MiniLM column
             vector_column = DocumentRecord.embedding
@@ -40,10 +38,8 @@ class SqlAlchemyDocumentRepository:
         else:
             raise ValueError(f"Unsupported embedding dimension: {vector_length}. Expected 384 (MiniLM) or 768 (SciBERT).")
 
-        # 2. Ask Postgres to mathematically calculate the Cosine Distance
         distance_col = vector_column.cosine_distance(query_embedding).label("distance") # type: ignore
 
-        # 3. Modern SQLAlchemy 2.0 Query Construction
         stmt = (
             select(DocumentRecord, distance_col)
             .where(vector_column.is_not(None))
@@ -51,10 +47,8 @@ class SqlAlchemyDocumentRepository:
             .limit(limit)
         )
 
-        # 4. Execute across the network to the Postgres daemon
         rows = self.session.execute(stmt).all()
 
-        # 5. Map the results using our centralized Hexagonal adapter
         return [
             (self._to_domain(row[0]), float(row[1])) for row in rows
         ]
