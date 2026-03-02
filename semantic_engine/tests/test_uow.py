@@ -16,10 +16,10 @@ def test_uow_commits_transaction_successfully(session_factory):
         uow.documents.add(doc)
         uow.commit()
 
-    session = session_factory()
-    record = session.query(DocumentRecord).filter_by(id=doc_id).first()
-    assert record is not None
-    assert record.title == "UOW Commit Test"
+    with session_factory() as session:
+        record = session.query(DocumentRecord).filter_by(id=doc_id).first()
+        assert record is not None
+        assert record.title == "UOW Commit Test"
 
 def test_uow_rolls_back_on_exception(session_factory):
     uow = SqlAlchemyUnitOfWork(session_factory)
@@ -36,6 +36,6 @@ def test_uow_rolls_back_on_exception(session_factory):
     except RuntimeError:
         pass
 
-    session = session_factory()
-    record = session.query(DocumentRecord).filter_by(id=doc_id).first()
-    assert record is None
+    with session_factory() as session:
+        record = session.query(DocumentRecord).filter_by(id=doc_id).first()
+        assert record is None
