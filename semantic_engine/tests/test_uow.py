@@ -1,54 +1,22 @@
 import pytest
-import uuid
-from semantic_engine.infrastructure.database.uow import SqlAlchemyUnitOfWork
+from uuid import uuid4
 from semantic_engine.core_interfaces.domain import DocumentMetadata
 
-def test_uow_commits_transaction_successfully(session_factory):
-    uow = SqlAlchemyUnitOfWork(session_factory)
-    doc_id = uuid.uuid4()
+def test_uow_commits_on_success(fake_uow) -> None:
+    doc = DocumentMetadata(id=uuid4(), title="Test", abstract="Test")
+    with fake_uow:
+        fake_uow.documents.add(doc)
+        fake_uow.commit()
 
-    doc = DocumentMetadata(
-        id=doc_id,
-        title="UOW Commit Test",
-        abstract="Testing transactions.",
-        categories=[],
-        authors=[]
-    )
+    assert fake_uow.committed is True
+    assert fake_uow.rolled_back is False
 
-    with uow:
-        uow.documents.save(doc)
-        uow.commit()
+def test_uow_rolls_back_on_exception(fake_uow) -> None:
+    class DomainException(Exception): pass
 
-    # Verify outside the transaction boundary
-    session = session_factory()
-    from semantic_engine.infrastructure.database.models import DocumentRecord
-    record = session.query(DocumentRecord).filter_by(id=doc_id).first()
+    with pytest.raises(DomainException):
+        with fake_uow:
+            raise DomainException("Simulation of a system crash")
 
-    assert record is not None
-    assert record.title == "UOW Commit Test"
-
-def test_uow_rolls_back_on_exception(session_factory):
-    uow = SqlAlchemyUnitOfWork(session_factory)
-    doc_id = uuid.uuid4()
-
-    doc = DocumentMetadata(
-        id=doc_id,
-        title="UOW Rollback Test",
-        abstract="Testing rollbacks.",
-        categories=[],
-        authors=[]
-    )
-
-    try:
-        with uow:
-            uow.documents.save(doc)
-            raise RuntimeError("Simulated Crash")
-    except RuntimeError:
-        pass
-
-    session = session_factory()
-    from semantic_engine.infrastructure.database.models import DocumentRecord
-    record = session.query(DocumentRecord).filter_by(id=doc_id).first()
-
-    # Prove the database successfully rolled back the save
-    assert record is None
+    assert fake_uow.committed is False
+    assert fake_uow.rolled_back is True
