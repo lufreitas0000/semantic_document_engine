@@ -5,8 +5,11 @@ Unlike our Domain Models (which hold business logic), these are strictly
 data transfer objects mapped to SQL tables.
 """
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-from sqlalchemy import String, Text
+from sqlalchemy import String, Text, DateTime
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import ARRAY
 from uuid import UUID
+from datetime import datetime
 from pgvector.sqlalchemy import Vector  # type: ignore
 
 class Base(DeclarativeBase):
@@ -25,5 +28,12 @@ class DocumentRecord(Base):
     id: Mapped[UUID] = mapped_column(primary_key=True)
     title: Mapped[str] = mapped_column(String(500))
     abstract: Mapped[str] = mapped_column(Text)
-    # Instructs Postgres to allocate a dense 384-float array
-    embedding: Mapped[list[float] | None] = mapped_column(Vector(384))
+    # --- New Analytics Metadata ---
+    arxiv_id: Mapped[str] = mapped_column(String, unique=True, nullable=True)
+    published_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    categories: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=True)
+    authors: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=True)
+
+    # --- Dual Brain Embeddings ---
+    embedding: Mapped[list[float]] = mapped_column(Vector(384), nullable=True)
+    embedding_scibert: Mapped[list[float]] = mapped_column(Vector(768), nullable=True)
