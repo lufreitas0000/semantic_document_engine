@@ -25,6 +25,21 @@ def postgres_url():
     with PostgresContainer("pgvector/pgvector:pg16") as postgres:
         yield postgres.get_connection_url()
 
+@pytest.fixture(scope="session")
+def postgres_container():
+    """
+    Spins up an ephemeral Postgres container with pgvector.
+    Scope is 'session' to pay the Docker boot cost only once per test run.
+    """
+    with PostgresContainer("pgvector/pgvector:pg16") as postgres:
+        db_url = postgres.get_connection_url()
+        engine = create_engine(db_url)
+        with engine.begin() as conn:
+            conn.execute("CREATE EXTENSION IF NOT EXISTS vector;")
+        Base.metadata.create_all(engine)
+        yield engine
+        engine.dispose()
+
 @pytest.fixture(scope="function")
 def db_engine(postgres_url):
     """Creates a fresh database schema for every single test."""
@@ -107,3 +122,41 @@ def fake_api():
 @pytest.fixture
 def fake_ml():
     return FakeEmbeddingModel()
+
+
+# --- 4. Database Sessions & Data Factories ---
+
+@pytest.fixture(scope="function")
+def db_session(session_factory):
+    """
+    Allocates a single database transaction context (Session) for a test,
+    and safely closes the TCP socket to Postgres afterward.
+    """
+    session = session_factory()
+    yield session
+    session.close()
+
+@pytest.fixture
+def document_factory():
+    """
+    Test Data Builder Pattern (Object Mother).
+    Returns a closure that dynamically allocates DocumentMetadata entities
+    on the Heap with default variables, preventing test-coupling to the constructor.
+    """
+    def _create_document(title: str = "Default Title", **kwargs) -> DocumentMetadata:
+        from uuid import uuid4
+        import random
+        from semantic_engine.core_interfaces.domain import DocumentMetadata
+
+        return DocumentMetadata(
+            id=uuid4(),
+            title=title,
+            abstract=kwargs.get("abstract", "Default abstract for testing."),
+            arxiv_id=kwargs.get("arxiv_id", f"2601.{random.randint(1000, 9999)}"),
+            published_date=kwargs.get("published_date", None),
+            categories=kwargs.get("categories", []),
+            authors=kwargs.get("authors", []),
+            embedding=kwargs.get("embedding", None),
+            embedding_scibert=kwargs.get("embedding_scibert", None)
+        )
+    return _create_document
