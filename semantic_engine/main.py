@@ -9,7 +9,8 @@ from dotenv import load_dotenv
 # Load environment variables before initializing any Heavy ML models
 load_dotenv()
 
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, APIRouter
+from typing import List, Dict, Any
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
 from celery.result import AsyncResult # type: ignore
@@ -101,3 +102,29 @@ async def search_papers(query: str, limit: int = 5, uow: SqlAlchemyUnitOfWork = 
     ]
 
     return {"query": query, "results": formatted_results}
+
+
+@app.get("/documents/", response_model=List[Dict[str, Any]])
+def get_ingested_documents(
+    limit: int = 10,
+    uow: SqlAlchemyUnitOfWork = Depends(get_uow)
+):
+    """
+    Retrieves ingested documents from the database.
+    Proves that the Celery worker successfully committed the transaction.
+    """
+    with uow:
+        # Calls our new O(1) query method
+        documents = uow.documents.get_all(limit=limit)
+
+        # Map Domain Entities to DTOs
+        return [
+            {
+                "id": str(doc.id),
+                "title": doc.title,
+                "arxiv_id": doc.arxiv_id,
+                # True if either vector space mapping exists
+                "is_embedded": doc.embedding is not None or doc.embedding_scibert is not None
+            }
+            for doc in documents
+        ]

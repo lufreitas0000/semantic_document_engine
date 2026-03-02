@@ -26,6 +26,16 @@ class SqlAlchemyDocumentRepository:
             return self._to_domain(record)
         return None
 
+    def get_all(self, limit: int = 10) -> list[DocumentMetadata]:
+        """
+        Executes a single SQL query to fetch N records.
+        Maps the SQLAlchemy ORM objects into pure Python Domain entities (Heap memory).
+        """
+        stmt = select(DocumentRecord).limit(limit)
+        # .scalars() extracts the actual model instances from the SQLAlchemy Row objects
+        records = self.session.scalars(stmt).all()
+        return [self._to_domain(record) for record in records]
+
 
     def search_by_embedding(self, query_embedding: list[float], limit: int = 5) -> list[tuple[DocumentMetadata, float]]:
         vector_length = len(query_embedding)

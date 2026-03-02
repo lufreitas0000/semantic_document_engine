@@ -2,6 +2,7 @@
 semantic_engine/tests/conftest.py
 Global Test Fixtures and Dependency Injection.
 """
+#test/conftest.py
 import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
@@ -57,6 +58,10 @@ class FakeRepository:
 
     def get(self, document_id: UUID) -> DocumentMetadata | None:
         return self._documents.get(document_id)
+
+    def get_all(self, limit: int = 10) -> list[DocumentMetadata]:
+        # self._documents is presumably a dict mapping UUID -> DocumentMetadata
+        return list(self._documents.values())[:limit]
 
     def search_by_embedding(self, query_embedding: list[float], limit: int = 5) -> list[tuple[DocumentMetadata, float]]:
         docs: list[DocumentMetadata] = list(self._documents.values())[:limit]

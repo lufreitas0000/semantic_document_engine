@@ -23,15 +23,28 @@ async def fetch_and_store_papers(
     atomically to the database.
     """
     papers_saved = 0
+    with uow:
+        async for document in api_client.fetch_papers_by_query(query, limit):
+            # 1. Project text into embedding manifold (R^n)
+            vector = ml_model.embed_text(document.abstract)
 
-    async for document in api_client.fetch_papers_by_query(query, limit):
-        vector = ml_model.embed_text(document.abstract)
-        embedded_document = replace(document, embedding=vector)
-        with uow:
+            # 2. Allocate new PyObject via functional replacement
+            #    (Dynamic hardware routing based on tensor shape)
+            if len(vector) == 768:
+                embedded_document = replace(document, embedding_scibert=vector)
+            elif len(vector) == 384:
+                embedded_document = replace(document, embedding=vector)
+            else:
+                raise ValueError(
+                    f"Vector manifold mismatch: expected R^384 or R^768, got R^{len(vector)}"
+                )
+
+            # 3. Add to Unit of Work (Heap memory)
             uow.documents.add(embedded_document)
-            uow.commit()
+            papers_saved += 1
 
-        papers_saved += 1
+        # Flush Heap memory buffer to Disk (ACID transaction)
+        uow.commit()
 
     return papers_saved
 
