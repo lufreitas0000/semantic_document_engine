@@ -6,6 +6,7 @@ pys2                # Semantic Scholar API wrapper
 uvicorn
 celery
 redis
+python-dotenv
 
 # --- ML & Math ---
 numpy               # C-backed contiguous arrays

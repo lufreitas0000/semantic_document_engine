@@ -1,105 +1,101 @@
 """
-Composition Root & Driving Adapter (FastAPI).
+FastAPI Web Application.
+This is the primary entry point for HTTP traffic. It acts as a lightweight router,
+pushing heavy machine learning tasks to the Celery Message Broker.
 """
+import os
+from dotenv import load_dotenv
+
+# Load environment variables before initializing any Heavy ML models
+load_dotenv()
+
+from fastapi import FastAPI, Depends, HTTPException, status
+from pydantic import BaseModel
 from contextlib import asynccontextmanager
-from typing import Any, AsyncGenerator
-from fastapi import FastAPI, HTTPException, Depends
-from sqlalchemy import Engine, create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.orm.session import Session
+from celery.result import AsyncResult
 
-from semantic_engine.core_interfaces.uow import AbstractUnitOfWork
-from semantic_engine.core_interfaces.api import AcademicGraphPort
 from semantic_engine.infrastructure.database.uow import SqlAlchemyUnitOfWork
-from semantic_engine.app_ingestion.workflows import fetch_and_store_papers
 from semantic_engine.infrastructure.ml.sentence_transformer import HuggingFaceEmbeddingModel
-from semantic_engine.core_interfaces.ml import TextEmbeddingPort
-from semantic_engine.app_ingestion.workflows import fetch_and_store_papers, search_papers
+from semantic_engine.infrastructure.database.models import Base
+from semantic_engine.infrastructure.worker.tasks import ingest_papers_task
+from semantic_engine.infrastructure.worker.celery_app import celery_app
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
+# --- Database & ML Initialization ---
+DATABASE_URL = "postgresql+psycopg2://test:test@localhost:5432/semantic_db"
+engine = create_engine(DATABASE_URL)
+SessionFactory = sessionmaker(bind=engine)
 
-#from semantic_engine.infrastructure.api.semantic_scholar import SemanticScholarClient
-from semantic_engine.infrastructure.api.arxiv import ArxivClient
+# Note: We still load the ML model in the Web API because the /search endpoint
+# needs to embed the 5-word user query instantly. (This is very fast).
+ml_model = HuggingFaceEmbeddingModel(model_name="allenai/scibert_scivocab_uncased")
 
-# 1. Global Infrastructure Setup
-# The exact TCP coordinates and cryptography needed to reach the isolated Docker process.
-DB_URL = "postgresql+psycopg2://semantic_user:super_secret_password@localhost:5432/semantic_engine_db"
-# This does not connect to the database immediately. It creates a Connection Pool in RAM
-engine: Engine = create_engine(url=DB_URL)
-# This is a factory function (a cookie-cutter) for connections
-SessionFactory: sessionmaker[Session] = sessionmaker(bind=engine)
-
-# lifespan: FastAPI is an event-driven loop. When you hit Ctrl+C in your terminal to kill the server, you don't want to just sever the TCP sockets abruptly
-# This acts as a suspension point. Everything before yield runs when the server boots. The server then pauses here and listens for HTTP requests. When you kill the server, the code after yield executes.
-# engine.dispose(): Safely drains the Connection Pool, sending polite FIN packets to Postgres to close the network sockets
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+async def lifespan(app: FastAPI):
+    Base.metadata.create_all(engine)
     yield
-    engine.dispose()
 
 app = FastAPI(title="Semantic Document Engine", lifespan=lifespan)
 
-# --- Dependency Providers ---
-# Provider Functions. They are the only places in the application that are allowed to instantiate physical, entropy-heavy Adapters
-# These functions teach FastAPI how to instantiate our adapters
-def get_uow() -> AbstractUnitOfWork:
-    return SqlAlchemyUnitOfWork(session_factory=SessionFactory)
+def get_uow():
+    return SqlAlchemyUnitOfWork(SessionFactory)
 
-def get_api_client() -> AcademicGraphPort:
-    return ArxivClient()
-# ----------------------------
+# --- Schemas ---
+class SearchResult(BaseModel):
+    title: str
+    abstract: str
+    distance: float
 
-# Instantiate the ML model globally so weights remain in RAM
-ml_model_instance = HuggingFaceEmbeddingModel()
+# --- Endpoints ---
 
-def get_ml_model() -> TextEmbeddingPort:
-    return ml_model_instance
-
-# 3. The Endpoints
-# An ASGI router. It listens for HTTP POST requests at that URL.
-@app.post(path="/ingest/")
-async def ingest_papers(
-    query: str,
-    limit: int = 5,
-    # FastAPI will automatically run get_uow() and get_api_client() and inject them
-    # When a web request arrives, FastAPI pauses, executes get_uow(), takes the resulting SqlAlchemyUnitOfWork, and injects it into the uow variable.
-    uow: AbstractUnitOfWork = Depends(get_uow),
-    api_client: AcademicGraphPort = Depends(get_api_client),
-    ml_model: TextEmbeddingPort = Depends(get_ml_model)
-) -> dict[str, Any]:
-    """Triggers the Ingestion Workflow."""
-    try:
-        count: int = await fetch_and_store_papers(query=query, api_client=api_client, uow=uow, ml_model=ml_model, limit=limit)
-        return {"message": "Success", "papers_ingested": count, "query": query}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(object=e))
-
-
-
-@app.get(path="/search/")
-async def search_documents(
-    query: str,
-    limit: int = 5,
-    uow: AbstractUnitOfWork = Depends(get_uow),
-    ml_model: TextEmbeddingPort = Depends(get_ml_model)
-) -> dict[str, Any]:
+@app.post("/ingest/", status_code=status.HTTP_202_ACCEPTED)
+async def ingest_papers(query: str, limit: int = 5):
     """
-    Performs a Dense Vector Semantic Search against the database.
+    Submits a bulk download and ML embedding job to the background worker.
+    Returns immediately so the web server does not freeze.
     """
-    try:
-        results = await search_papers(query=query, ml_model=ml_model, uow=uow, limit=limit)
+    # .delay() pushes the exact function arguments into the Redis Queue
+    task = ingest_papers_task.delay(query, limit)
 
-        # Serialize the Domain Particles into JSON (excluding the massive vector payload)
-        return {
-            "query": query,
-            "results": [
-                {
-                    "id": str(doc.id),
-                    "title": doc.title,
-                    "abstract": doc.abstract,
-                    "distance": round(dist, 4) # Add the distance here!
-                }
-                for doc, dist in results # Unpack the tuple
-            ]
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(object=e))
+    return {
+        "message": "Ingestion job submitted successfully.",
+        "task_id": task.id,
+        "status_url": f"/tasks/{task.id}"
+    }
+
+@app.get("/tasks/{task_id}")
+async def get_task_status(task_id: str):
+    """
+    Allows the client (Streamlit) to poll the status of a specific background job.
+    """
+    task_result = AsyncResult(task_id, app=celery_app)
+
+    response = {
+        "task_id": task_id,
+        "status": task_result.status,
+    }
+
+    if task_result.state == 'SUCCESS':
+        response["result"] = task_result.result
+    elif task_result.state == 'FAILURE':
+        response["error"] = str(task_result.info)
+
+    return response
+
+@app.get("/search/", response_model=dict)
+async def search_papers(query: str, limit: int = 5, uow: SqlAlchemyUnitOfWork = Depends(get_uow)):
+    """
+    Performs a real-time semantic search using Postgres pgvector.
+    """
+    query_vector = ml_model.embed_text(query)
+
+    with uow:
+        results = uow.documents.search_by_embedding(query_vector, limit)
+
+    formatted_results = [
+        SearchResult(title=doc.title, abstract=doc.abstract, distance=dist)
+        for doc, dist in results
+    ]
+
+    return {"query": query, "results": formatted_results}
