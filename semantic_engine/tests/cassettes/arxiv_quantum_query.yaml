@@ -1,0 +1,114 @@
+interactions:
+- request:
+    body: ''
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Host:
+      - export.arxiv.org
+      User-Agent:
+      - python-httpx/0.28.1
+    method: GET
+    uri: https://export.arxiv.org/api/query?search_query=quantum&start=0&max_results=2&sortBy=submittedDate&sortOrder=descending
+  response:
+    body:
+      string: "<?xml version='1.0' encoding='UTF-8'?>\n<feed xmlns:opensearch=\"http://a9.com/-/spec/opensearch/1.1/\"
+        xmlns:arxiv=\"http://arxiv.org/schemas/atom\" xmlns=\"http://www.w3.org/2005/Atom\">\n
+        \ <id>https://arxiv.org/api/ndubrUZv9ZX5TOCUeQxK8HIXL2g</id>\n  <title>arXiv
+        Query: search_query=all:quantum&amp;id_list=&amp;start=0&amp;max_results=2</title>\n
+        \ <updated>2026-03-02T12:42:23Z</updated>\n  <link href=\"https://arxiv.org/api/query?search_query=all:quantum&amp;start=0&amp;max_results=2&amp;id_list=\"
+        type=\"application/atom+xml\"/>\n  <opensearch:itemsPerPage>2</opensearch:itemsPerPage>\n
+        \ <opensearch:totalResults>456995</opensearch:totalResults>\n  <opensearch:startIndex>0</opensearch:startIndex>\n
+        \ <entry>\n    <id>http://arxiv.org/abs/2602.24280v1</id>\n    <title>Geometric
+        Resilience of Quantum LiDAR in Turbulent Media: A Wasserstein Distance Approach</title>\n
+        \   <updated>2026-02-27T18:51:41Z</updated>\n    <link href=\"https://arxiv.org/abs/2602.24280v1\"
+        rel=\"alternate\" type=\"text/html\"/>\n    <link href=\"https://arxiv.org/pdf/2602.24280v1\"
+        rel=\"related\" type=\"application/pdf\" title=\"pdf\"/>\n    <summary>Quantum-enhanced
+        LiDAR, exploiting squeezed states of light, promises significant sensitivity
+        gains over classical protocols. However, in realistic scenarios characterized
+        by high optical losses and atmospheric turbulence, standard figures of merit,
+        such as quantum fidelity or the quantum Chernoff bound, saturate rapidly,
+        failing to provide a usable gradient for system optimization. In this work,
+        we propose the Quantum Wasserstein Distance of order 2 ($W_2$) as a robust
+        geometric metric for lossy quantum sensing. Unlike overlap-based measures,
+        $W_2$ quantifies the transport cost in phase space and maintains a linear
+        response to channel transmissivity, even in regimes where the quantum state
+        is virtually indistinguishable from thermal noise. We derive an analytical
+        threshold for the quantum advantage, demonstrating that squeezing is only
+        beneficial when the transmissivity exceeds a critical value determined by
+        the environmental noise-to-signal ratio. Furthermore, using Monte-Carlo simulations
+        of a fading channel, we show that $W_2$ acts as a high-fidelity estimator
+        of instantaneous link quality, exhibiting a wide dynamic range immune to the
+        numerical instabilities of fidelity-based metrics. This geometric framework
+        bridges the gap between quantum optimal transport and practical receiver design,
+        paving the way for adaptive sensing in scattering media.</summary>\n    <category
+        term=\"quant-ph\" scheme=\"http://arxiv.org/schemas/atom\"/>\n    <published>2026-02-27T18:51:41Z</published>\n
+        \   <arxiv:comment>8 pages, 4 figures. Submitted to Physical Review A</arxiv:comment>\n
+        \   <arxiv:primary_category term=\"quant-ph\"/>\n    <author>\n      <name>Arnaud
+        Coatanhay</name>\n    </author>\n    <author>\n      <name>Ang\xE9lique Dr\xE9meau</name>\n
+        \   </author>\n  </entry>\n  <entry>\n    <id>http://arxiv.org/abs/2602.24276v1</id>\n
+        \   <title>Asymptotically Solvable Quantum Circuits</title>\n    <updated>2026-02-27T18:49:08Z</updated>\n
+        \   <link href=\"https://arxiv.org/abs/2602.24276v1\" rel=\"alternate\" type=\"text/html\"/>\n
+        \   <link href=\"https://arxiv.org/pdf/2602.24276v1\" rel=\"related\" type=\"application/pdf\"
+        title=\"pdf\"/>\n    <summary>The discovery of chaotic quantum circuits with
+        (partially) solvable dynamics has played a key role in our understanding of
+        non-equilibrium quantum matter and, at the same time, has helped the development
+        of concrete platforms for quantum computation. It was shown that solvability
+        does not prevent the generation of chaotic dynamics, however, it imposes non-trivial
+        constraints on the generated correlations. A natural question is then whether
+        it is possible to gain insight into the generic case despite the latter being
+        very hard to access. To address this question here we introduce a family of
+        'asymptotically solvable' quantum circuits where the solvability constraints
+        only affect correlations on length scales beyond a tuneable threshold. This
+        means that their dynamics are only solvable for long enough times: for times
+        shorter than the threshold they are generic. We show this by computing both
+        their dynamical correlations on the equilibrium (infinite temperature) state
+        and their thermalisation dynamics following quantum quenches from compatible
+        (asymptotically solvable) non-equilibrium initial states. The class of systems
+        we introduce is generically ergodic but contains a non-interacting point,
+        which we use to provide exact analytical results, complementing those of numerical
+        experiments, on the non-solvable early time regime.</summary>\n    <category
+        term=\"cond-mat.stat-mech\" scheme=\"http://arxiv.org/schemas/atom\"/>\n    <category
+        term=\"hep-th\" scheme=\"http://arxiv.org/schemas/atom\"/>\n    <category
+        term=\"math-ph\" scheme=\"http://arxiv.org/schemas/atom\"/>\n    <category
+        term=\"quant-ph\" scheme=\"http://arxiv.org/schemas/atom\"/>\n    <published>2026-02-27T18:49:08Z</published>\n
+        \   <arxiv:primary_category term=\"cond-mat.stat-mech\"/>\n    <author>\n
+        \     <name>Samuel H. Pickering</name>\n    </author>\n    <author>\n      <name>Bruno
+        Bertini</name>\n    </author>\n  </entry>\n</feed>\n"
+    headers:
+      Accept-Ranges:
+      - bytes
+      Age:
+      - '0'
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '5136'
+      Date:
+      - Mon, 02 Mar 2026 12:42:23 GMT
+      Strict-Transport-Security:
+      - max-age=300
+      X-Cache:
+      - MISS, MISS, MISS
+      X-Cache-Hits:
+      - 0, 0, 0
+      X-Served-By:
+      - cache-lga21993-LGA, cache-lga21937-LGA, cache-gig2250066-GIG
+      X-Timer:
+      - S1772455343.431893,VS0,VE274
+      content-type:
+      - application/atom+xml; charset=utf-8
+      server:
+      - Google Frontend
+      via:
+      - 1.1 varnish, 1.1 varnish, 1.1 varnish
+      x-cloud-trace-context:
+      - dd90e7611a53519fc1e05364fa46cc93
+    status:
+      code: 200
+      message: OK
+version: 1

@@ -20,10 +20,10 @@ def test_repository_can_save_and_retrieve_document(session_factory):
         embedding_scibert=[0.2] * 768
     )
 
-    repo.save(original_doc)
+    repo.add(original_doc)
     session.commit()
 
-    retrieved_doc = repo.get_by_id(doc_id)
+    retrieved_doc = repo.get(doc_id)
 
     assert retrieved_doc is not None
     assert retrieved_doc.title == "Test Container Paper"

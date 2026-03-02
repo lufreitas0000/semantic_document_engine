@@ -5,7 +5,7 @@ Global Test Fixtures and Dependency Injection.
 import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
-from testcontainers.postgres import PostgresContainer
+from testcontainers.postgres import PostgresContainer # type: ignore
 
 from typing import AsyncGenerator, Self
 from uuid import UUID, uuid4

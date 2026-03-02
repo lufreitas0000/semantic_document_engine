@@ -1,22 +1,41 @@
 import pytest
-from uuid import uuid4
+import uuid
+from semantic_engine.infrastructure.database.uow import SqlAlchemyUnitOfWork
 from semantic_engine.core_interfaces.domain import DocumentMetadata
+from semantic_engine.infrastructure.database.models import DocumentRecord
 
-def test_uow_commits_on_success(fake_uow) -> None:
-    doc = DocumentMetadata(id=uuid4(), title="Test", abstract="Test")
-    with fake_uow:
-        fake_uow.documents.add(doc)
-        fake_uow.commit()
+def test_uow_commits_transaction_successfully(session_factory):
+    uow = SqlAlchemyUnitOfWork(session_factory)
+    doc_id = uuid.uuid4()
 
-    assert fake_uow.committed is True
-    assert fake_uow.rolled_back is False
+    doc = DocumentMetadata(
+        id=doc_id, title="UOW Commit Test", abstract="Testing transactions."
+    )
 
-def test_uow_rolls_back_on_exception(fake_uow) -> None:
-    class DomainException(Exception): pass
+    with uow:
+        uow.documents.add(doc)
+        uow.commit()
 
-    with pytest.raises(DomainException):
-        with fake_uow:
-            raise DomainException("Simulation of a system crash")
+    session = session_factory()
+    record = session.query(DocumentRecord).filter_by(id=doc_id).first()
+    assert record is not None
+    assert record.title == "UOW Commit Test"
 
-    assert fake_uow.committed is False
-    assert fake_uow.rolled_back is True
+def test_uow_rolls_back_on_exception(session_factory):
+    uow = SqlAlchemyUnitOfWork(session_factory)
+    doc_id = uuid.uuid4()
+
+    doc = DocumentMetadata(
+        id=doc_id, title="UOW Rollback Test", abstract="Testing rollbacks."
+    )
+
+    try:
+        with uow:
+            uow.documents.add(doc)
+            raise RuntimeError("Simulated Crash")
+    except RuntimeError:
+        pass
+
+    session = session_factory()
+    record = session.query(DocumentRecord).filter_by(id=doc_id).first()
+    assert record is None
