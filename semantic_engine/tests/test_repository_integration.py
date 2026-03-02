@@ -1,50 +1,44 @@
 import pytest
-from sqlalchemy.orm import Session
+from sqlalchemy import text
 from semantic_engine.infrastructure.database.repository import SqlAlchemyDocumentRepository
-from semantic_engine.core_interfaces.domain import Document
 
-def test_repository_vector_search_compiles_and_executes(postgres_container):
+def test_repository_vector_search_routing(db_session, document_factory):
     """
-    Verifies that the SQLAlchemy AST correctly compiles into a pgvector
-    cosine distance operation (<=>) and successfully negotiates the I/O
-    boundary with the Postgres container.
+    Verifies dynamic AST routing for SIMD vector operations.
+    Ensures both 384d (MiniLM) and 768d (SciBERT) branches compile
+    and execute successfully over the Postgres TCP boundary.
     """
-    # 1. Arrange: Allocate local memory state
-    engine = postgres_container
+    # 1. Arrange: Allocate Repository and Entities on the Heap
+    repo = SqlAlchemyDocumentRepository(db_session)
 
-    # Orthogonal vectors (Cosine distance = 1.0, similarity = 0.0)
-    # Parallel vectors (Cosine distance = 0.0, similarity = 1.0)
-    doc_target = Document(
-        id="target-uuid",
-        title="Quantum Physics",
-        content="Target content",
-        embedding=[1.0] + [0.0] * 383  # 384-dimensional vector
+    doc_target = document_factory(
+        title="Target Matrix",
+        embedding=[1.0] + [0.0] * 383,           # 384d
+        embedding_scibert=[1.0] + [0.0] * 767    # 768d
     )
-    doc_noise = Document(
-        id="noise-uuid",
-        title="Culinary Arts",
-        content="Noise content",
-        embedding=[0.0, 1.0] + [0.0] * 382
+    doc_noise = document_factory(
+        title="Orthogonal Noise",
+        embedding=[0.0, 1.0] + [0.0] * 382,
+        embedding_scibert=[0.0, 1.0] + [0.0] * 766
     )
 
-    with Session(engine) as session:
-        repo = SqlAlchemyDocumentRepository(session)
+    # 2. Act: Push state to persistent storage (Syscalls)
+    repo.add(doc_target)
+    repo.add(doc_noise)
+    db_session.commit()
 
-        # 2. Act: Push state to Postgres (INSERT syscalls)
-        repo.add(doc_target)
-        repo.add(doc_noise)
-        session.commit() # Flush L1/L2 Python cache to persistent DB storage
+    # 3. Assert: 384-dimensional branch execution (MiniLM)
+    results_384 = repo.search_by_embedding([1.0] + [0.0] * 383, limit=1)
+    assert len(results_384) == 1
+    assert results_384[0][0].id == doc_target.id
+    assert results_384[0][1] < 1e-5
 
-        # Query using a vector perfectly aligned with doc_target
-        query_vector = [1.0] + [0.0] * 383
+    # 4. Assert: 768-dimensional branch execution (SciBERT)
+    results_768 = repo.search_by_embedding([1.0] + [0.0] * 767, limit=1)
+    assert len(results_768) == 1
+    assert results_768[0][0].id == doc_target.id
+    assert results_768[0][1] < 1e-5
 
-        # Triggers the AST compilation -> SQL String -> TCP Network I/O
-        results = repo.search_by_similarity(query_vector, limit=1)
-
-        # 3. Assert: Verify the SIMD operations executed correctly in Postgres
-        assert len(results) == 1
-        assert results[0].id == "target-uuid"
-
-        # Teardown: Clean up state for subsequent tests
-        session.execute("TRUNCATE TABLE documents CASCADE;")
-        session.commit()
+    # 5. Teardown: Clean up state
+    db_session.execute(text("TRUNCATE TABLE documents CASCADE;"))
+    db_session.commit()
