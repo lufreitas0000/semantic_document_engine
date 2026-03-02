@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from semantic_engine.core_interfaces.domain import DocumentMetadata
 from semantic_engine.infrastructure.database.models import DocumentRecord
 
+
 class SqlAlchemyDocumentRepository:
     """
     Translates the mathematical Set operations (.add, .get) into SQL
@@ -16,56 +17,73 @@ class SqlAlchemyDocumentRepository:
         self.session = session
 
     def add(self, document: DocumentMetadata) -> None:
-        # Translate pure Domain Model -> ORM Record
-        record = DocumentRecord(
-            id=document.id,
-            title=document.title,
-            abstract=document.abstract,
-            embedding=document.embedding
-        )
-        self.session.add(record) # Appends to the Identity Map (Session Cache)
+        record = self._to_model(document)
+        self.session.add(record)
 
     def get(self, document_id: UUID) -> DocumentMetadata | None:
-        # Executes: SELECT * FROM documents WHERE id = ?
-        record = self.session.get(DocumentRecord, document_id)
-        if record is None:
-            return None
+        record = self.session.query(DocumentRecord).filter_by(id=document_id).first()
+        if record:
+            return self._to_domain(record)
+        return None
 
-        # Translate ORM Record -> pure Domain Model
+
+    def search_by_embedding(self, query_embedding: list[float], limit: int = 5) -> list[tuple[DocumentMetadata, float]]:
+        # 1. Dynamic Hardware Routing based on Vector Dimensionality
+        vector_length = len(query_embedding)
+
+        if vector_length == 384:
+            # Route to the MiniLM column
+            vector_column = DocumentRecord.embedding
+        elif vector_length == 768:
+            # Route to the SciBERT column
+            vector_column = DocumentRecord.embedding_scibert
+        else:
+            raise ValueError(f"Unsupported embedding dimension: {vector_length}. Expected 384 (MiniLM) or 768 (SciBERT).")
+
+        # 2. Ask Postgres to mathematically calculate the Cosine Distance
+        distance_col = vector_column.cosine_distance(query_embedding).label("distance") # type: ignore
+
+        # 3. Modern SQLAlchemy 2.0 Query Construction
+        stmt = (
+            select(DocumentRecord, distance_col)
+            .where(vector_column.is_not(None))
+            .order_by(distance_col)
+            .limit(limit)
+        )
+
+        # 4. Execute across the network to the Postgres daemon
+        rows = self.session.execute(stmt).all()
+
+        # 5. Map the results using our centralized Hexagonal adapter
+        return [
+            (self._to_domain(row[0]), float(row[1])) for row in rows
+        ]
+
+    def _to_model(self, doc: DocumentMetadata) -> DocumentRecord:
+        return DocumentRecord(
+            id=doc.id,
+            title=doc.title,
+            abstract=doc.abstract,
+            arxiv_id=doc.arxiv_id,
+            published_date=doc.published_date,
+            categories=doc.categories,
+            authors=doc.authors,
+            embedding=doc.embedding,
+            embedding_scibert=doc.embedding_scibert
+        )
+
+    def _to_domain(self, record: DocumentRecord) -> DocumentMetadata:
         return DocumentMetadata(
             id=record.id,
             title=record.title,
             abstract=record.abstract,
-            embedding=list(record.embedding) if record.embedding is not None else None
+            arxiv_id=record.arxiv_id,
+            published_date=record.published_date,
+            categories=record.categories or [],
+            authors=record.authors or [],
+            embedding=record.embedding,
+            embedding_scibert=record.embedding_scibert
         )
 
-    def search_by_embedding(self, query_embedding: list[float], limit: int = 5) -> list[tuple[DocumentMetadata, float]]:
-        # 1. Ask Postgres to label the distance calculation as a column
-        distance_col = DocumentRecord.embedding.cosine_distance(query_embedding).label("distance") # type: ignore
 
-        # Mathematically calculate the Cosine Distance in the Postgres engine
-        # We use type: ignore because mypy cannot read pgvector's C-extension methods
-        # a SQL SELECT  statement. mathematical instructions for across the TCP network to the PostgreSQL daemon
 
-        # 2. Select both the Record AND the Distance
-        stmt = (
-            select(DocumentRecord, distance_col)
-            .where(DocumentRecord.embedding.is_not(None))
-            .order_by(distance_col)
-            .limit(limit)
-        )
-        # 3. execute() returns raw rows instead of just objects
-        rows = self.session.execute(stmt).all()
-
-        # 4. Map row[0] (The Record) and row[1] (The Float Distance)
-        return [
-            (
-                DocumentMetadata(
-                    id=row[0].id,
-                    title=row[0].title,
-                    abstract=row[0].abstract,
-                    embedding=list(row[0].embedding) if row[0].embedding is not None else None
-                ),
-                float(row[1])
-            ) for row in rows
-        ]
