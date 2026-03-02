@@ -53,6 +53,8 @@ cuda-pathfinder==1.4.0
     # via cuda-bindings
 dnspython==2.8.0
     # via email-validator
+docker==7.1.0
+    # via testcontainers
 email-validator==2.3.0
     # via
     #   fastapi
@@ -251,13 +253,18 @@ pys2==1.1.0
 pytest==9.0.2
     # via
     #   -r requirements.in
+    #   pytest-asyncio
     #   pytest-cov
+pytest-asyncio==1.3.0
+    # via -r requirements.in
 pytest-cov==7.0.0
     # via -r requirements.in
 python-dateutil==2.9.0.post0
     # via pandas
 python-dotenv==1.2.1
-    # via uvicorn
+    # via
+    #   testcontainers
+    #   uvicorn
 python-multipart==0.0.22
     # via fastapi
 pytz==2025.2
@@ -279,6 +286,7 @@ regex==2026.2.28
     # via transformers
 requests==2.32.5
     # via
+    #   docker
     #   pys2
     #   streamlit
     #   xenon
@@ -334,6 +342,8 @@ sympy==1.14.0
     # via torch
 tenacity==9.1.4
     # via streamlit
+testcontainers==4.14.1
+    # via -r requirements.in
 threadpoolctl==3.6.0
     # via scikit-learn
 tokenizers==0.22.2
@@ -341,7 +351,9 @@ tokenizers==0.22.2
 toml==0.10.2
     # via streamlit
 torch==2.10.0
-    # via sentence-transformers
+    # via
+    #   -r requirements.in
+    #   sentence-transformers
 tornado==6.5.4
     # via streamlit
 tqdm==4.67.3
@@ -372,19 +384,23 @@ typing-extensions==4.15.0
     #   import-linter
     #   mypy
     #   pydantic
+    #   pytest-asyncio
     #   referencing
     #   rich-toolkit
     #   sentence-transformers
     #   sqlalchemy
     #   starlette
     #   streamlit
+    #   testcontainers
     #   torch
 tzdata==2025.3
     # via pandas
 urllib3==2.6.3
     # via
+    #   docker
     #   requests
     #   sentry-sdk
+    #   testcontainers
 uvicorn[standard]==0.41.0
     # via
     #   fastapi
@@ -404,7 +420,9 @@ websockets==16.0
 wheel==0.46.3
     # via pip-tools
 wrapt==2.1.1
-    # via vcrpy
+    # via
+    #   testcontainers
+    #   vcrpy
 xenon==0.9.3
     # via -r requirements.in
 

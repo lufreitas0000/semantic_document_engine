@@ -1,36 +1,31 @@
-"""
-Integration tests for the SQLAlchemy Adapters.
-"""
 import pytest
-from uuid import uuid4
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+import uuid
+from datetime import datetime
+from semantic_engine.infrastructure.database.repository import SqlAlchemyDocumentRepository
 from semantic_engine.core_interfaces.domain import DocumentMetadata
-from semantic_engine.infrastructure.database.models import Base
-from semantic_engine.infrastructure.database.uow import SqlAlchemyUnitOfWork
 
-@pytest.fixture
-def sqlite_session_factory():
-    # The :memory: URI creates a purely volatile database in RAM
-    engine = create_engine("sqlite:///:memory:")
-    # Compiles our Declarative Base into CREATE TABLE strings and executes them
-    Base.metadata.create_all(engine)
-    return sessionmaker(bind=engine)
+def test_repository_can_save_and_retrieve_document(session_factory):
+    session = session_factory()
+    repo = SqlAlchemyDocumentRepository(session)
 
-def test_sqlalchemy_uow_can_save_and_retrieve(sqlite_session_factory):
-    uow = SqlAlchemyUnitOfWork(sqlite_session_factory)
-    doc_id = uuid4()
-    original_doc = DocumentMetadata(id=doc_id, title="Database Theory", abstract="ACID properties.")
+    doc_id = uuid.uuid4()
+    original_doc = DocumentMetadata(
+        id=doc_id,
+        title="Test Container Paper",
+        abstract="Running in real Postgres.",
+        categories=["quant-ph"],
+        authors=["Alice", "Bob"],
+        published_date=datetime(2025, 1, 1),
+        embedding=[0.1] * 384,
+        embedding_scibert=[0.2] * 768
+    )
 
-    # Transaction 1: Write to database
-    with uow:
-        uow.documents.add(original_doc)
-        uow.commit()
+    repo.save(original_doc)
+    session.commit()
 
-    # Transaction 2: Read from database (fresh connection)
-    with uow:
-        retrieved_doc = uow.documents.get(doc_id)
+    retrieved_doc = repo.get_by_id(doc_id)
 
     assert retrieved_doc is not None
-    assert retrieved_doc.id == original_doc.id
-    assert retrieved_doc.title == "Database Theory"
+    assert retrieved_doc.title == "Test Container Paper"
+    assert "quant-ph" in retrieved_doc.categories
+    assert len(retrieved_doc.embedding_scibert) == 768

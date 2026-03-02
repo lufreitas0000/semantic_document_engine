@@ -7,6 +7,7 @@ numpy               # C-backed contiguous arrays
 scipy               # Required for CSR (Compressed Sparse Row) matrices for BM25
 scikit-learn        # Standard ML utilities
 sentence-transformers # HuggingFace dense vector models
+torch
 
 # --- I/O & Ingestion ---
 httpx               # Async HTTP client
@@ -20,10 +21,12 @@ pgvector            # Python client for Postgres HNSW vector indices
 
 # --- Dev & Testing ---
 pytest              # TDD Test runner
+pytest-asyncio
 mypy                # Static type checker
 pip-tools           # Compiles .in to deterministic .txt
 vcrpy               # Network request recording and replay
 respx               # HTTP mocking for tests
+testcontainers
 
 # --- CI/CD & Metrology ---
 pytest-cov          # Test coverage via sys.settrace

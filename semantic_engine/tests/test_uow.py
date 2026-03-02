@@ -1,52 +1,54 @@
-"""
-TDD proofs for the Unit of Work pattern.
-Ensures that the context manager correctly evaluates commit and rollback paths.
-"""
 import pytest
-from uuid import uuid4
-from typing import Self
-
+import uuid
+from semantic_engine.infrastructure.database.uow import SqlAlchemyUnitOfWork
 from semantic_engine.core_interfaces.domain import DocumentMetadata
-from semantic_engine.core_interfaces.repository import DocumentRepository
-from semantic_engine.tests.test_repository import FakeRepository
 
-class FakeUnitOfWork:
-    """    In-memory simulation of a database transaction.    """
-    def __init__(self) -> None:
-        self.documents: DocumentRepository = FakeRepository()
-        self.committed = False
-        self.rolled_back = False
-    def __enter__(self) -> Self:
-        return self
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
-        if exc_type is not None:
-            self.rollback()
-    def commit(self) -> None:
-        self.committed = True
-    def rollback(self) -> None:
-        self.rolled_back = True
+def test_uow_commits_transaction_successfully(session_factory):
+    uow = SqlAlchemyUnitOfWork(session_factory)
+    doc_id = uuid.uuid4()
 
-
-def test_uow_commits_on_success() -> None:
-    uow = FakeUnitOfWork()
-    doc = DocumentMetadata(id=uuid4(), title="Test", abstract="Test")
+    doc = DocumentMetadata(
+        id=doc_id,
+        title="UOW Commit Test",
+        abstract="Testing transactions.",
+        categories=[],
+        authors=[]
+    )
 
     with uow:
-        uow.documents.add(doc)
+        uow.documents.save(doc)
         uow.commit()
 
-    assert uow.committed is True
-    assert uow.rolled_back is False
+    # Verify outside the transaction boundary
+    session = session_factory()
+    from semantic_engine.infrastructure.database.models import DocumentRecord
+    record = session.query(DocumentRecord).filter_by(id=doc_id).first()
 
-def test_uow_rolls_back_on_exception() -> None:
-    uow = FakeUnitOfWork()
+    assert record is not None
+    assert record.title == "UOW Commit Test"
 
-    class DomainException(Exception):
+def test_uow_rolls_back_on_exception(session_factory):
+    uow = SqlAlchemyUnitOfWork(session_factory)
+    doc_id = uuid.uuid4()
+
+    doc = DocumentMetadata(
+        id=doc_id,
+        title="UOW Rollback Test",
+        abstract="Testing rollbacks.",
+        categories=[],
+        authors=[]
+    )
+
+    try:
+        with uow:
+            uow.documents.save(doc)
+            raise RuntimeError("Simulated Crash")
+    except RuntimeError:
         pass
 
-    with pytest.raises(DomainException):
-        with uow:
-            raise DomainException("Simulation of a system crash")
+    session = session_factory()
+    from semantic_engine.infrastructure.database.models import DocumentRecord
+    record = session.query(DocumentRecord).filter_by(id=doc_id).first()
 
-    assert uow.committed is False
-    assert uow.rolled_back is True
+    # Prove the database successfully rolled back the save
+    assert record is None
