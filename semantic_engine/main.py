@@ -12,7 +12,7 @@ load_dotenv()
 from fastapi import FastAPI, Depends, HTTPException, status
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
-from celery.result import AsyncResult
+from celery.result import AsyncResult # type: ignore
 
 from semantic_engine.infrastructure.database.uow import SqlAlchemyUnitOfWork
 from semantic_engine.infrastructure.ml.sentence_transformer import HuggingFaceEmbeddingModel

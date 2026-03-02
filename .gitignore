@@ -21,3 +21,4 @@ coverage.xml
 
 # Developer Scratchpads
 .playground/
+*.session.sql

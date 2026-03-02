@@ -1,36 +1,49 @@
 from fastapi.testclient import TestClient
+from unittest.mock import patch, MagicMock
 from uuid import uuid4
+
+from semantic_engine.main import app, get_uow
 from semantic_engine.core_interfaces.domain import DocumentMetadata
-from semantic_engine.main import app, get_uow, get_api_client, get_ml_model
 
 client = TestClient(app)
 
-def test_ingest_endpoint_success(fake_uow, fake_api, fake_ml) -> None:
-    # Override FastAPI dependencies using the Pytest fixtures
-    app.dependency_overrides[get_uow] = lambda: fake_uow
-    app.dependency_overrides[get_api_client] = lambda: fake_api
-    app.dependency_overrides[get_ml_model] = lambda: fake_ml
+# 1. Test the Ingestion Endpoint (Mocking Celery)
+@patch("semantic_engine.main.ingest_papers_task.delay")
+def test_ingest_endpoint_triggers_celery(mock_delay) -> None:
+    # Setup the fake Celery task return object
+    mock_task = MagicMock()
+    mock_task.id = "fake-uuid-1234"
+    mock_delay.return_value = mock_task
 
+    # Hit the endpoint
     response = client.post("/ingest/?query=Quantum&limit=2")
 
-    assert response.status_code == 200
+    assert response.status_code == 202
     data = response.json()
-    assert data["message"] == "Success"
-    assert data["papers_ingested"] == 2
-    assert fake_uow.committed is True
+    assert data["message"] == "Ingestion job submitted successfully."
+    assert data["task_id"] == "fake-uuid-1234"
 
-    app.dependency_overrides.clear()
+    # Verify Celery was called with the exact parameters
+    mock_delay.assert_called_once_with("Quantum", 2)
 
-def test_search_endpoint_success(fake_uow, fake_ml) -> None:
+# 2. Test the Search Endpoint
+def test_search_endpoint_success(fake_uow) -> None:
+    # Seed the fake database
     doc = DocumentMetadata(
-        id=uuid4(), title="Vector Search Paper", abstract="Math", embedding=fake_ml.embed_text("Math")
+        id=uuid4(),
+        title="Vector Search Paper",
+        abstract="Math",
+        embedding=[0.1] * 384,
+        embedding_scibert=[0.2] * 768
     )
     fake_uow.documents.add(doc)
 
+    # Override the UoW dependency
     app.dependency_overrides[get_uow] = lambda: fake_uow
-    app.dependency_overrides[get_ml_model] = lambda: fake_ml
 
-    response = client.get("/search/?query=Math&limit=5")
+    # We mock the global ml_model directly to bypass the HuggingFace engine
+    with patch("semantic_engine.main.ml_model.embed_text", return_value=[0.1] * 384):
+        response = client.get("/search/?query=Math&limit=5")
 
     assert response.status_code == 200
     data = response.json()

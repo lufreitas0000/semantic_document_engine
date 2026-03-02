@@ -1,4 +1,9 @@
+# migrations/env.py
 from logging.config import fileConfig
+import os
+from dotenv import load_dotenv
+load_dotenv(override=True)
+
 
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
@@ -12,8 +17,15 @@ config = context.config
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
-if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+#if config.config_file_name is not None:
+#    fileConfig(config.config_file_name)
+
+database_url = os.getenv("DATABASE_URL")
+#print(f"\n--- DEBUG: Alembic is trying to connect to: {database_url} ---\n")
+if database_url:
+    config.set_main_option("sqlalchemy.url", database_url)
+else:
+    raise ValueError("DATABASE_URL is missing from the environment!")
 
 # add your model's MetaData object here
 # for 'autogenerate' support

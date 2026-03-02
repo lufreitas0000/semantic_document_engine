@@ -2,7 +2,7 @@
 Celery Application Configuration.
 This acts as the orchestrator for our background ML jobs.
 """
-from celery import Celery
+from celery import Celery # type: ignore
 
 # Initialize Celery and point it to our local Redis container
 celery_app = Celery(

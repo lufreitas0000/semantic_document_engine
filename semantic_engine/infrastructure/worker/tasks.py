@@ -9,7 +9,7 @@ load_dotenv()
 import asyncio
 from uuid import uuid4
 
-from celery import shared_task
+from celery import shared_task # type: ignore
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -47,9 +47,9 @@ def ingest_papers_task(self, query: str, limit: int):
 
     count = asyncio.run(
         fetch_and_store_papers(
-            query=query,
-            api_port=api_client,
-            uow=uow,
+            query,
+            api_client,
+            uow,
             ml_model=ml_model,
             limit=limit
         )
