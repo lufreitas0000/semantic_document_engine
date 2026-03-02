@@ -1,6 +1,11 @@
-# --- API & Validation ---
+# --- WEB, IO, API & Validation ---
 fastapi[standard]   # ASGI Web framework (includes Uvicorn server)
 pydantic            # Data validation using Python type hints
+httpx               # Async HTTP client
+pys2                # Semantic Scholar API wrapper
+uvicorn
+celery
+redis
 
 # --- ML & Math ---
 numpy               # C-backed contiguous arrays
@@ -9,9 +14,6 @@ scikit-learn        # Standard ML utilities
 sentence-transformers # HuggingFace dense vector models
 torch
 
-# --- I/O & Ingestion ---
-httpx               # Async HTTP client
-pys2                # Semantic Scholar API wrapper
 
 # --- Database & Storage ---
 sqlalchemy          # Object-Relational Mapper (ORM) / SQL Toolkit
