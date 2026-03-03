@@ -19,7 +19,7 @@ torch
 # --- Database & Storage ---
 sqlalchemy          # Object-Relational Mapper (ORM) / SQL Toolkit
 alembic             # Database migration tool (tracks schema changes as a DAG)
-psycopg2-binary     # PostgreSQL C-adapter
+psycopg[binary]     # PostgreSQL C-adapter (Version 3)
 pgvector            # Python client for Postgres HNSW vector indices
 
 # --- Dev & Testing ---

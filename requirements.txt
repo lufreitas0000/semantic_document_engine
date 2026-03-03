@@ -249,8 +249,10 @@ prompt-toolkit==3.0.52
     # via click-repl
 protobuf==6.33.5
     # via streamlit
-psycopg2-binary==2.9.11
+psycopg[binary]==3.3.3
     # via -r requirements.in
+psycopg-binary==3.3.3
+    # via psycopg
 pyarrow==23.0.1
     # via streamlit
 pydantic[email]==1.10.26
@@ -368,7 +370,7 @@ sympy==1.14.0
     # via torch
 tenacity==9.1.4
     # via streamlit
-testcontainers==4.14.1
+testcontainers[postgres]==4.14.1
     # via -r requirements.in
 threadpoolctl==3.6.0
     # via scikit-learn
@@ -409,6 +411,7 @@ typing-extensions==4.15.0
     #   huggingface-hub
     #   import-linter
     #   mypy
+    #   psycopg
     #   pydantic
     #   pytest-asyncio
     #   referencing
