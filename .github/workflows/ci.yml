@@ -44,5 +44,6 @@ jobs:
       run: xenon --max-absolute B --max-modules B --max-average A semantic_engine/
 
     - name: Run Unit Tests & Coverage (pytest-cov)
-      # Fails the build if coverage drops below 90%
+      env:
+        DATABASE_URL: "postgresql+psycopg://test:test@localhost:5432/test_db"
       run: python -m pytest --cov=semantic_engine --cov-fail-under=90 semantic_engine/tests/
