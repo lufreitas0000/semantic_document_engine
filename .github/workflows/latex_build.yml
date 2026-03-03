@@ -9,17 +9,14 @@ on:
     paths:
       - 'docs/**'
 
-jobs:
+ jobs:
   build_pdf:
     runs-on: ubuntu-latest
+    container:
+      image: texlive/texlive:latest
     steps:
       - name: Checkout Repository DAG
         uses: actions/checkout@v4
-
-      - name: Allocate TeX Binaries
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y texlive-latex-base texlive-fonts-recommended texlive-latex-extra
 
       - name: Compile AST to PDF
         working-directory: docs
