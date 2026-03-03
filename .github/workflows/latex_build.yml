@@ -9,7 +9,7 @@ on:
     paths:
       - 'docs/**'
 
- jobs:
+jobs:
   build_pdf:
     runs-on: ubuntu-latest
     container:
