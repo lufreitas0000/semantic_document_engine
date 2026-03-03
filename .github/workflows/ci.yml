@@ -3,8 +3,22 @@ name: Continuous Integration
 on:
   push:
     branches: [ "main", "feat/**" ]
+    paths:
+      - 'semantic_engine/**'
+      - 'migrations/**'
+      - 'requirements.*'
+      - 'pytest.ini'
+      - 'alembic.ini'
+      - '.github/workflows/ci.yml'
   pull_request:
     branches: [ "main" ]
+    paths:
+      - 'semantic_engine/**'
+      - 'migrations/**'
+      - 'requirements.*'
+      - 'pytest.ini'
+      - 'alembic.ini'
+      - '.github/workflows/ci.yml'
 
 jobs:
   test-and-type-check:
