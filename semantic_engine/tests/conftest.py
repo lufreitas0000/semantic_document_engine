@@ -22,7 +22,7 @@ from semantic_engine.core_interfaces.ml import TextEmbeddingPort
 @pytest.fixture(scope="session")
 def postgres_url():
     """Boots a throwaway PostgreSQL container with pgvector once per test session."""
-    with PostgresContainer("pgvector/pgvector:pg16") as postgres:
+    with PostgresContainer("pgvector/pgvector:pg16", driver="psycopg") as postgres:
         yield postgres.get_connection_url()
 
 @pytest.fixture(scope="session")
@@ -31,7 +31,7 @@ def postgres_container():
     Spins up an ephemeral Postgres container with pgvector.
     Scope is 'session' to pay the Docker boot cost only once per test run.
     """
-    with PostgresContainer("pgvector/pgvector:pg16") as postgres:
+    with PostgresContainer("pgvector/pgvector:pg16", driver="psycopg") as postgres:
         db_url = postgres.get_connection_url()
         engine = create_engine(db_url)
         with engine.begin() as conn:
