@@ -44,6 +44,137 @@ The following subsections will decompose each of these physical boundaries, deta
 \subsection{The Inner Ring: \texttt{core\_interfaces/}}
 % TODO: Detail domain entities, repository protocols, ML interfaces, and Unit of Work.
 
+The \texttt{core\_interfaces} directory is the absolute center of our system. It is computationally blind to the outside world; it contains zero external dependencies and imports only from the Python standard library. Here, we define the pure data structures (Entities) and the abstract contracts (Ports) that govern the physics of our pipeline.
+
+We construct this inner ring sequentially, building its own internal Directed Acyclic Graph. We must define the core entity before we can define the interfaces that manipulate it.
+
+
+
+
+
+\subsubsection*{1. The Domain Entity (\texttt{domain.py})}
+
+The fundamental data entity of the architecture is the academic paper. We define this using a pure data structure. While the actual repository contains extensive metadata fields (citation counts, authors, publication dates), we present a structurally simplified version here for clarity:
+
+\begin{lstlisting}[caption={Simplified Domain Entity}]
+from dataclasses import dataclass
+from typing import Optional
+
+@dataclass(frozen=True)
+class DocumentMetadata:
+    id: str
+    title: str
+    abstract: str
+    embedding: Optional[list[float]] = None
+\end{lstlisting}
+
+In traditional Object-Oriented Programming, a class is designed to encapsulate both state (data) and behavior (methods). However, in our Core Domain, this entity is stripped of all behavior. It is a \textbf{pure construction}. We are not using the class to execute imperative logic; we are using it purely as a mathematical container and a custom Type. In the language of category theory, this class acts as a rigid codomain. It guarantees that no matter where the raw bytes originate---whether scraped from an arXiv XML feed or fetched from a Semantic Scholar JSON payload---they enter our pure mathematical core in an exact, predictable shape.
+
+Crucially, we enforce this purity using the \texttt{frozen=True} parameter. This instructs the Python interpreter to make the object \textbf{immutable} immediately after instantiation. If an outer Infrastructure layer (like a database adapter) attempts to modify the document's abstract after creation, the interpreter will throw a fatal \texttt{FrozenInstanceError}. To change the state, the system must mathematically map the old object to a completely new instance. This functional paradigm completely eliminates unintended side effects and guarantees thread-safety when passing these documents across asynchronous \texttt{Celery} workers.
+
+This immutability has profound implications for how the Python object is managed at the hardware level. Traditionally, Python objects are highly dynamic; they store their arbitrary attributes in an underlying hash map known as the \texttt{\_\_dict\_\_}. This allows developers to add new variables at runtime, but it forces the interpreter to constantly resize the hash map, leading to memory fragmentation. By freezing the dataclass, we lock the internal pointers. It is important to clarify that this does not compress the Python object into a perfectly contiguous C-style struct (as the standard Python \texttt{list} is still an array of heap pointers), but it completely arrests the dynamic expansion of the object's footprint. When processing $1.14$ million documents in a single pipeline, preventing dynamic dictionary resizing saves gigabytes of RAM overhead.
+
+We further protect the system's RAM using the \texttt{Optional[list[float]] = None} type hint. A Transformer embedding is typically a dense vector of $768$ floating-point numbers. In a 64-bit Python environment, a single list of 768 floats consumes several kilobytes of memory. If we run a PostgreSQL query to fetch 1 million document titles to populate a web dashboard, and SQLAlchemy loads those 1 million \texttt{DocumentMetadata} objects into RAM, eagerly loading the vector embeddings alongside them would instantly trigger an Out-Of-Memory (OOM) fatal crash.
+
+By defaulting the embedding to \texttt{None}, we utilize lazy allocation. The \texttt{None} object in Python is a global singleton; it consumes effectively zero bytes per instance. The massive arrays of floats are never allocated into Python's RAM unless a specific ML use case explicitly requests them. For the vast majority of operations, the heavy vector algebra is entirely delegated to the \texttt{pgvector} C-extension inside the database, and the Python application only ever handles the lightweight metadata.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+\subsubsection*{2. The Service Ports (\texttt{api.py} and \texttt{ml.py})}
+
+With the base data structure defined, we must establish the abstract contracts for populating it. The engine requires two external boundaries: an API to fetch the academic literature, and an embedding model to translate that text into a continuous mathematical vector.
+
+By ``continuous,'' we refer to mapping discrete, isolated categorical strings (human words) into a dense array of floating-point numbers ($\mathbb{R}^d$). In this continuous space, unlike a discrete boolean search, relationships between concepts can be smoothly measured using geometric angles and distances.
+
+\begin{lstlisting}[caption={External Service Protocols}]
+from typing import Protocol
+from core_interfaces.domain import DocumentMetadata
+
+# From api.py
+class AcademicGraphPort(Protocol):
+    def fetch_document(self, query: str) -> DocumentMetadata:
+        ...
+
+# From ml.py
+class TextEmbeddingPort(Protocol):
+    def generate_embedding(self, text: str) -> list[float]:
+        ...
+\end{lstlisting}
+
+
+\textbf{Pedagogical Note: Python OOP and Structural Subtyping} \\
+For researchers transitioning from imperative scripting to Object-Oriented Programming (OOP), the syntax above warrants a strict breakdown:
+\begin{itemize}
+    \item \textbf{\texttt{Protocol}:} By inheriting from \texttt{typing.Protocol}, we declare that these classes are \textit{not} meant to be executed. They contain no logic (denoted by the \texttt{...} ellipsis). They act purely as structural blueprints. Any external adapter that implements a \texttt{fetch\_document} method with the exact same inputs and outputs is automatically recognized as valid by Python's type checker (a concept known as structural subtyping, or ``duck typing'').
+    \item \textbf{The \texttt{self} Argument:} In Python, \texttt{self} represents the specific instance of the class being operated on. When we eventually call \texttt{adapter.fetch\_document("quantum")}, the interpreter automatically passes the \texttt{adapter} object as the invisible first argument. Therefore, \texttt{self} is required in the definition, but omitted during execution.
+    \item \textbf{Type Hints (\texttt{:} and \texttt{->}):} The variables \texttt{query} and \texttt{text} define the exact input parameters required by the functions. The colon (\texttt{: str}) dictates that these inputs must be strings. The arrow (\texttt{->}) explicitly dictates what the function is guaranteed to return (e.g., returning a \texttt{DocumentMetadata} object). This transforms arbitrary Python code into a mathematically verifiable contract.
+\end{itemize}
+
+Notice that \texttt{AcademicGraphPort} does not know about Semantic Scholar or arXiv. It simply dictates that \textit{if} an adapter wishes to fetch a document, it must accept a string query and return our pure \texttt{DocumentMetadata} entity.
+
+
+
+
+
+\subsubsection*{3. The Repository Port (\texttt{repository.py})}
+
+Once a document is fetched and its embedding is calculated, it must be persisted. We define the \texttt{DocumentRepository} protocol to abstract the database storage mechanisms (like SQL arrays or Hierarchical Navigable Small World graphs).
+
+\begin{lstlisting}[caption={The Repository Protocol}]
+from typing import Protocol
+from core_interfaces.domain import DocumentMetadata
+
+class DocumentRepository(Protocol):
+    def add(self, document: DocumentMetadata) -> None:
+        ...
+
+    def get(self, doc_id: str) -> DocumentMetadata:
+        ...
+
+    def find_similar(self, vector: list[float], limit: int = 10) -> list[DocumentMetadata]:
+        ...
+\end{lstlisting}
+
+\subsubsection*{4. The Unit of Work (\texttt{uow.py})}
+
+Finally, we must manage the transactional boundaries of our database. If an application use case involves saving a document and updating an index, both operations must succeed, or both must fail (ACID compliance). The \texttt{AbstractUnitOfWork} (UoW) protocol acts as the manager for the repository, exposing \texttt{\_\_enter\_\_} and \texttt{\_\_exit\_\_} methods to support Python's \texttt{with} context managers.
+
+\begin{lstlisting}[caption={The Unit of Work Protocol}]
+from typing import Protocol
+from core_interfaces.repository import DocumentRepository
+
+class AbstractUnitOfWork(Protocol):
+    documents: DocumentRepository
+
+    def __enter__(self) -> 'AbstractUnitOfWork':
+        ...
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        ...
+
+    def commit(self) -> None:
+        ...
+
+    def rollback(self) -> None:
+        ...
+\end{lstlisting}
+
+By reading \texttt{core\_interfaces/}, a developer can understand the entire capabilities of the system---fetching, embedding, storing, and transaction management---without ever looking at a single line of SQL or HTTP request code.
+
+
+
 \subsection{The Outer Ring: \texttt{infrastructure/}}
 % TODO: Detail PostgreSQL models, external API wrappers (arXiv, Semantic Scholar), and Celery tasks.
 
