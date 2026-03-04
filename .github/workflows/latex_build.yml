@@ -22,6 +22,8 @@ jobs:
         working-directory: docs
         run: |
           pdflatex main.tex
+          bibtex main
+          pdflatex main.tex
           pdflatex main.tex
 
       - name: Upload Binary Artifact
