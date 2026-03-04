@@ -1,8 +1,128 @@
-\section*{0.1 The Goal: Quantifying Topological Knowledge Drift}
-\addcontentsline{toc}{section}{0.1 The Goal: Quantifying Topological Knowledge Drift}
 
-In classical statistical mechanics, a system's macroscopic state is derived by integrating over the phase space of its microscopic constituents. We apply an isomorphic principle to academic literature. Rather than tracking particles in $\mathbb{R}^3$, we map natural language into a high-dimensional vector space $\mathbb{R}^d$ ($d=768$ for standard Transformer architectures).
 
-Let this embedding space represent a non-linear Riemannian manifold $\mathcal{M}$, where the distance metric between two vectors is not the standard Euclidean $L_2$ norm, but a cosine distance derived from the attention mechanism's learned probability distributions.
 
-A single academic concept moving through this space over time $t$ can be modeled as a stochastic trajectory—analogous to a Wiener process. We define \textbf{Topological Knowledge Drift} as the measurable derivative of lexical and semantic clustering across temporal epochs. By applying band-pass signal filtering to the frequency derivatives $\frac{\partial f}{\partial t}$ of localized jargon, we can mathematically isolate the genesis of new scientific sub-disciplines from the ambient noise of general academic boilerplate.
+\section*{0.1 The Topology of Semantic Space: Statics and Dynamics}
+\addcontentsline{toc}{section}{0.1 The Topology of Semantic Space: Statics and Dynamics}
+
+To rigorously quantify the evolution of scientific literature, we must first map discrete human language into a continuous, measurable mathematical space. This section defines the static structure of that space, the metrics used to measure it, the origins of its topological curvature, and the kinematics of its temporal evolution.
+
+\subsection*{0.1.1 The Mapping Function: From Strings to Vectors}
+
+In classical natural language processing, a word was treated as an orthogonal basis vector in a space of dimension $V$ (where $V$ is the vocabulary size). This ``one-hot encoding'' is mathematically impoverished; the dot product of any two distinct words is exactly zero, implying no shared semantic components.
+
+Modern Transformer architectures (such as SciBERT) fundamentally alter this mapping. They operate on the principle of \textit{contextual superposition}. A sequence of text—whether a single word, a sentence, or an entire abstract—is first decomposed into discrete tokens. Through layers of Self-Attention mechanisms, the network computes a weighted average of these tokens, passing them through non-linear activation functions.
+
+The resulting output is a dense, continuous vector $\vec{v} \in \mathbb{R}^d$ (typically $d=768$). Crucially, this vector does not represent a static dictionary definition; it represents the \textit{contextual state} of the idea. The sentence ``The state of the system is solid'' and ``He presented a solid argument'' will map the word ``solid'' to entirely different coordinates in $\mathbb{R}^{768}$, because the attention mechanism acts as an interference pattern, shifting the vector based on its surrounding context. To represent an entire document, we perform an operation such as ``Mean Pooling,'' which averages the coordinate states of all constituent tokens into a single center-of-mass vector representing the document's global semantic thesis.
+
+\subsection*{0.1.2 The Static Topology: A Non-Linear Riemannian Manifold}
+
+We define this embedding space $\mathbb{R}^d$ not as a uniform, flat Euclidean space, but as containing a lower-dimensional, non-linear \textbf{Riemannian manifold} $\mathcal{M}$.
+
+A Riemannian manifold is a space that is locally Euclidean (flat) but globally curved, equipped with a metric tensor $g$ that allows us to define distances and angles at every tangent space. Why do we assert that the semantic space is a curved manifold rather than a flat $\mathbb{R}^d$ volume?
+
+The neural network does not populate $\mathbb{R}^{768}$ uniformly. Meaningful human language occupies an extremely narrow, twisted hypersurface within this high-dimensional volume. If you select two valid vectors $\vec{u}$ and $\vec{v}$ and draw a straight Euclidean line between them, the interpolated points along that line will likely fall into ``empty'' space—regions that do not correspond to any coherent human concept. The true semantic relationship follows the geodesics (the curved paths of shortest distance) \textit{along} the manifold's surface.
+
+
+\subsection*{0.1.3 Metric Selection: Axioms of Distance}
+
+Because the semantic space is a construct of the network's weights, the distance metric we choose to apply is an axiomatic choice of the observer. The metric tensor defines what physical properties of the vectors we consider to be mathematically valuable.
+
+The \textbf{Euclidean Distance ($L_2$ Norm)}, defined as $d_{L2}(\vec{u}, \vec{v}) = ||\vec{u} - \vec{v}||_2$, measures the absolute straight-line displacement between two coordinates. While geometrically intuitive, in high-dimensional embedding spaces, the magnitude (length) of a vector often correlates strongly with structural properties rather than pure meaning, such as the frequency of the word in the training corpus or the syntactic length of a sentence. Consequently, $L_2$ distance is highly susceptible to the "curse of dimensionality," where vectors with similar meanings but different magnitudes are pushed artificially far apart.
+
+The \textbf{Cosine Distance}, defined as $d_{\cos}(\vec{u}, \vec{v}) = 1 - \frac{\vec{u} \cdot \vec{v}}{||\vec{u}|| ||\vec{v}||}$, measures the angle $\theta$ between vectors, completely ignoring their magnitudes. By projecting all vectors onto the surface of a unit hypersphere $S^{d-1}$, cosine distance strips away the structural "mass" of the word and isolates the purely "directional" semantic theme. This makes it exceptionally robust for detecting conceptual similarity regardless of word frequency. It is the default metric for most dense retrieval tasks, though its primary disadvantage is the loss of potentially useful hierarchical magnitude data.
+
+The \textbf{Mahalanobis Distance} introduces local geometry into the calculation: $d_M(\vec{u}, \vec{v}) = \sqrt{(\vec{u} - \vec{v})^\top \Sigma^{-1} (\vec{u} - \vec{v})}$. Here, $\top$ denotes the transpose of the vector difference, and $\Sigma^{-1}$ is the inverse of the local covariance matrix of the semantic cluster. If the region of the manifold is dense and elongated along a specific axis (e.g., thousands of papers highly correlated in the "quantum computing" direction), $\Sigma^{-1}$ effectively rotates and scales the space to decorrelate the variables, normalizing the distance based on the local variance. This metric is theoretically superior for identifying outliers within a specific academic sub-field, but it is computationally expensive to calculate $\Sigma$ for a $768$-dimensional space.
+
+Finally, when measuring the distance between entire documents (which can be viewed as sets of word vectors rather than a single mean-pooled point), we utilize the \textbf{Wasserstein Distance} (or Earth Mover's Distance). Rooted in optimal transport theory, this metric calculates the minimum computational "work" required to transform the probability distribution of one document's semantic vectors into another's. It provides the most mathematically rigorous comparison of document similarity, but its cubic time complexity $\mathcal{O}(N^3)$ makes it largely intractable for real-time retrieval over millions of records.
+
+Ultimately, the choice of metric acts as a filter on our downstream signal processing. Selecting Cosine distance isolates conceptual drift, while Euclidean distance compounds conceptual drift with syntactical usage frequency. Our database architecture (PostgreSQL with `pgvector`) allows for the dynamic swapping of the $L_2$ and Cosine operators at the C-level, allowing us to test both hypotheses at runtime.
+
+\subsection*{0.1.4 Topological Bias: Information Theory and The Gravity of Training Data}
+
+The geometry of the manifold $\mathcal{M}$ is not an absolute truth; it is a direct integration of the statistical distribution of the training data. Transformer models establish this geometry through a self-supervised task known as \textbf{Masked Language Modeling (MLM)}.
+
+During training, the system randomly obscures a fraction of the input tokens. The network is forced to predict the missing vocabulary based solely on the surrounding context vectors. Mathematically, the network outputs a probability distribution over the entire vocabulary $V$. The weights of the network are then updated via backpropagation to minimize the \textbf{Cross-Entropy Loss}: $H(p, q) = -\sum p(x) \log q(x)$, where $p$ is the true one-hot distribution of the masked word, and $q$ is the network's predicted probability distribution.
+
+This is fundamentally an exercise in information theory. When the network encounters highly predictable, repetitive language constructs, the entropy of the prediction is low, and the gradients are small. When it encounters novel associations, the entropy is high, resulting in massive weight updates that physically pull the vectors closer together in the $\mathbb{R}^d$ space.
+
+This mechanism creates \textbf{Topological Bias}. The advantage of MLM is profound: it allows the model to learn deep contextual syntax and polysemy entirely unsupervised, without requiring human-labeled datasets. However, the disadvantage is that the model blindly encodes every statistical correlation present in the corpus.
+
+If the training data contains 10,000 papers linking ``quantum'' to ``cryptography'' and only 10 linking ``quantum'' to ``biology,'' the sheer volume of low-entropy parameter updates will warp the manifold, pulling the ``quantum'' vector deeply into the coordinate well of computer science. It acts analogous to gravitational mass: dense clusters of literature create deep geometrical wells that skew the distances of surrounding concepts, making rare interdisciplinary research appear artificially distant.
+
+To mitigate this catastrophic bias, we do not use a generalized model trained on Wikipedia (which heavily weights pop-culture and common nouns). We strictly utilize SciBERT, a model whose manifold was forged exclusively on 1.14 million peer-reviewed scientific papers. This ensures the baseline coordinate geometry is calibrated to the rigorous, highly structured dialect of academic research, rather than the colloquial entropy of the internet.
+
+
+\subsection*{0.1.5 Temporal Kinematics: The Procrustes Alignment}
+
+Having defined the static space, we can now model temporal dynamics. We partition the corpus into discrete time epochs (e.g., $t_1 = 2010\text{-}2012$, $t_2 = 2013\text{-}2015$).
+
+Tracking a concept across these epochs presents a strict geometric challenge. If we train a neural network independently on epoch $t_1$ and epoch $t_2$, the models will converge to entirely different coordinate bases due to the stochastic nature of gradient descent. The internal pairwise distances between concepts will be preserved, but the absolute coordinates will be arbitrarily rotated and reflected. We cannot directly compute the inner product of a vector $\vec{v}^{(t_1)}$ and $\vec{v}^{(t_2)}$.
+
+This spatial alignment is solved via the \textbf{Orthogonal Procrustes problem}. We compute an orthogonal rotation matrix $R$ that aligns the basis vectors by minimizing the Frobenius norm of the difference between the two temporal coordinate spaces:
+\begin{equation}
+    R^* = \arg\min_{R^\top R = I} ||RW^{(t_1)} - W^{(t_2)}||_F
+\end{equation}
+where $W^{(t)}$ represents the matrix of all localized word vectors at time $t$. Because $R$ is an orthogonal matrix ($R^\top R = I$), it acts as a rigid-body rotation, preserving the static geometry of $t_1$ while mapping it into the coordinate frame of $t_2$.
+
+
+
+\subsection*{0.1.5 Temporal Kinematics: Epochs, Tokens, and Alignment}
+
+To model the kinematics of semantic evolution, we must partition the historical corpus into discrete time windows, or \textbf{epochs} (e.g., $t_1 = 1990\text{-}1995$, $t_2 = 1996\text{-}2000$). Our objective is to track how the coordinate of a specific concept translates across these epochs.
+
+To understand this translation, we must precisely define what a ``concept'' is at the network level. Text is not fed into the model as whole words; it is decomposed into \textbf{tokens} using algorithms like WordPiece. A token is a sub-word unit optimized for information density. For example, while ``quantum'' might be a single token, ``qubits'' might be fractured into ``qu'' and ``##bits''. A token is the fundamental quanta of our linguistic phase space.
+
+There are two primary architectural paradigms for tracking a token's temporal trajectory, depending on how we handle the background manifold:
+
+\textbf{Method 1: The Static Background (The Contextual Approach)} \\
+If we utilize a frozen, pre-trained model like SciBERT, the metric tensor of the manifold is completely static. SciBERT was trained on $\sim 1.14$ million papers up to a specific cutoff date. This creates a chronological \textit{Topological Bias}: the manifold represents the ``average'' scientific consensus of its training era.
+
+How, then, do we measure time in a static space? We rely on the Transformer's attention mechanism. Because SciBERT generates vectors based on \textit{contextual superposition}, the vector for the token ``quantum'' in a 1980 paper is heavily influenced by surrounding 1980 tokens (e.g., ``mechanics'', ``spectra''). In a 2024 paper, the same token is influenced by modern tokens (e.g., ``cryptography'', ``entanglement''). Even though the underlying manifold is frozen, the mean-pooled coordinate for ``quantum'' shifts because its empirical co-occurrence network has changed. We are effectively observing historical documents through the lens of a fixed modern observer.
+
+\textbf{Method 2: Independent Manifolds (The Procrustes Approach)} \\
+Alternatively, we can train independent static embedding models (such as Word2Vec) from scratch for every discrete epoch $t$. This eliminates chronological bias, as the manifold at $t_1$ is forged purely by the physics of $t_1$.
+
+However, this introduces a strict geometric challenge. Due to the stochastic nature of gradient descent (random weight initialization), the coordinate bases of the $t_1$ manifold and the $t_2$ manifold are completely independent. A vector $\vec{v}^{(t_1)}$ and $\vec{v}^{(t_2)}$ exist in different vector spaces.
+
+To compute a trajectory, we must map these independent manifolds into a shared coordinate system. This is analogous to a global gauge transformation between two different observer reference frames. While \textit{parallel transport} moves a vector continuously along a curved manifold to preserve its inner products, our manifolds are discrete and disconnected. Instead, we use a rigid-body rotation to align the entire spaces, solved via the \textbf{Orthogonal Procrustes problem}:
+\begin{equation}
+    R^* = \arg\min_{R^\top R = I} ||RW^{(t_1)} - W^{(t_2)}||_F
+\end{equation}
+
+Here, $W^{(t)}$ represents a localized matrix of word vectors at time $t$. By ``localized,'' we mean the specific $(V \times d)$ coordinate matrix for the vocabulary $V$ derived strictly from the epoch $t$.
+
+To compute the optimal rotation matrix $R$, we do not use the entire vocabulary. We expect the vast majority of structural words (e.g., ``the'', ``equation'', ``temperature'') to remain conceptually stable over time. We isolate this subset of stable terms to act as \textbf{anchor words}. By minimizing the Frobenius norm of the difference between the anchor coordinates in $t_1$ and $t_2$, we lock the two reference frames together.
+
+Once the rotation $R$ is applied, the spaces are aligned, and we can isolate the vectors that \textit{did} move.
+
+
+
+\textbf{Concrete Example of Measurement: The Drift of ``Apple''} \\
+To illustrate the operational differences between these methods, consider the token ``apple'' evolving from agricultural botany in $t_1$ (1960) to personal computing in $t_2$ (2000).
+
+Using \textbf{Method 1 (Static Background)}, we extract all 1960 abstracts containing ``apple'' and pass them through the frozen SciBERT model. Crucially, a Transformer does not output a single vector for the document; it outputs a distinct vector for every token in the sequence.
+A sequence of $N$ tokens into a Transformer is converted into a matrix of size $(N \times d)$. There is a distinct $d=768$-dimensional vector for every single token in the input. Therefore, our algorithm searches the input array for the exact index $i$ where the token ``apple'' is located, and extracts only the vector $\vec{h}_i$ at that specific index. This specific vector has already been ``flavored'' by the surrounding context via the self-attention mechanism, but it remains fundamentally the coordinate for ``apple''.
+%We isolate the specific tensor index corresponding to the word ``apple'' and extract only that vector.
+Through the self-attention mechanism, this specific vector has been mathematically pulled toward the contextual gravity of surrounding tokens like ``tree'' and ``orchard''.
+
+Because natural language contains high entropy, ``apple'' may occasionally appear in random, irrelevant contexts (junk data). To isolate the true semantic signal from this noise, we apply the Law of Large Numbers. By averaging (mean-pooling) the isolated ``apple'' vectors extracted across thousands of documents, random contextual variations destructively interfere and cancel out to zero. Only the consistent, repeated semantic associations constructively interfere to define a stable center-of-mass vector $\vec{v}_{apple}^{(t_1)}$. We repeat this exact token-extraction process for the year 2000, where the attention mechanism shifts the vector toward ``software'' and ``hardware''. Because the background manifold $\mathcal{M}$ is universally shared and frozen, we can directly compute the displacement $\Delta \vec{v} = ||\vec{v}_{apple}^{(t_2)} - \vec{v}_{apple}^{(t_1)}||$ without requiring any geometric rotation.
+
+Using \textbf{Method 2 (Procrustes)}, we train a unique embedding model strictly on the 1960 corpus to yield the space $W^{(t_1)}$, and another on the 2000 corpus to yield $W^{(t_2)}$. We align these completely independent coordinate spaces using an orthogonal rotation matrix $R$, derived by minimizing the distance between stable anchor words (e.g., ``gravity'', ``velocity''). Once the reference frames are locked together, we measure the displacement $\Delta \vec{v} = ||R\vec{v}_{apple}^{(t_1)} - \vec{v}_{apple}^{(t_2)}||$.
+
+\subsection*{0.1.6 The Trajectory of Semantic Evolution and Empirical Validation}
+
+Regardless of whether we utilize the contextual attention of Method 1 or the orthogonal Procrustes alignment of Method 2, the historical evolution of a concept over $n$ epochs becomes a measurable, continuous trajectory $\vec{v}(t)$.
+
+Hamilton et al. \cite{Hamilton2018} established that this trajectory is not a random walk; it obeys deterministic statistical mechanics governed by two primary invariants:
+\begin{itemize}
+    \item \textbf{The Law of Conformity:} The magnitude of a vector's translation $||\Delta \vec{v}||$ is inversely proportional to its macroscopic frequency. Rare jargon drifts rapidly, whereas structural terms remain anchored by statistical inertia.
+    \item \textbf{The Law of Innovation:} Highly polysemous words (vectors residing at the intersection of multiple conceptual clusters) exhibit higher drift velocities, independent of their absolute frequency.
+\end{itemize}
+
+We formally define \textbf{Topological Knowledge Drift} as the measurable derivative of these trajectories. By applying band-pass signal filtering to the positional derivatives $\frac{\partial \vec{v}}{\partial t}$ of localized jargon, we can mathematically isolate the genesis of new scientific sub-disciplines from the ambient noise of general academic boilerplate.
+
+To empirically validate that this mathematical abstraction accurately maps to physical reality, we utilize historical control groups. We execute the temporal pipeline—extracting the $\vec{v}(t)$ paths over decades of physics literature. We isolate terms with known, paradigm-shifting semantic drifts; for instance, the term ``solid state'' in the 1960s transitioning geometrically to ``condensed matter'' in the 1970s following Philip Anderson's influence.
+
+If the architecture and metric tensor are physically sound, the derivative $\frac{\partial \vec{v}}{\partial t}$ for these control terms will exhibit a measurable, high-amplitude spike exactly at the historical inflection points. This serves as our fundamental proof that the continuous vector mathematics successfully captures the phase transitions of human scientific consensus.
+
+
