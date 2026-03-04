@@ -4,18 +4,74 @@
 %              semantic analysis pipeline.
 % ==============================================================================
 
-\documentclass[12pt,a4paper]{report}
+\documentclass[14pt,a4paper]{extreport}
 
 \usepackage[utf8]{inputenc}
-\usepackage{amsmath, amssymb, amsfonts} % For Riemannian geometry and formal logic
-\usepackage{hyperref}                   % For DAG structure of document links
-\usepackage{geometry}
+\usepackage{amsmath, amssymb, amsfonts}
 
-\geometry{a4paper, margin=1in}
+% --- Typography (The Tufte Aesthetic) ---
+\usepackage{libertine}      % Primary Serif Font
+\usepackage{inconsolata}    % Monospace Font for Code
+\usepackage[T1]{fontenc}
+\usepackage{microtype}      % Optical margin alignment and font expansion
+
+% --- Geometry (Asymmetric Margins) ---
+\usepackage{geometry}
+\geometry{
+    a4paper,
+    left=1.2in,
+    right=2in,  % Wide right margin for Tufte-style notes
+    top=1.2in,
+    bottom=1.2in,
+    marginparwidth=2in,
+    marginparsep=0.25in
+}
+
+% --- Color Space Allocation ---
+\usepackage{xcolor}
+\definecolor{LightBlue}{HTML}{5BCEFA}
+\definecolor{LightPink}{HTML}{F5A9B8}
+\definecolor{LightWhite}{HTML}{FFFFFF}
+\definecolor{DarkSlate}{HTML}{2B2B2B}
+
+% --- Vector Graphics (TikZ) ---
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, fit, calc, backgrounds}
+
+% --- Machine Learning Math Macros ---
+\input{math_commands}
+
+% --- Hypermedia Pointers ---
+\usepackage{hyperref}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=LightPink,  % Internal AST links (Table of Contents)
+    citecolor=LightBlue,  % Bibliography pointers
+    urlcolor=LightBlue,   % External URLs
+    pdftitle={Semantic Document Engine},
+    pdfauthor={System Architecture \& Engineering}
+}
+
+% --- Custom Environments (Thematic Panels) ---
+\usepackage{tcolorbox}
+\newtcolorbox{semanticpanel}[1][]{
+    colback=LightBlue!10,    % 10% opacity background
+    colframe=LightPink,      % Solid pink border
+    coltitle=DarkSlate,      % High contrast title text
+    fonttitle=\bfseries\large,
+    boxrule=1.5pt,
+    arc=4pt,
+    title=#1
+}
+
 
 \title{\textbf{Semantic Document Engine}\\ \large Quantifying Topological Knowledge Drift}
 \author{System Architecture \& Engineering}
 \date{\today}
+
+
+\includeonly{chapter1_architecture/ch1_main}
+
 
 \begin{document}
 
@@ -26,7 +82,9 @@ Mapping natural language to high-dimensional metric spaces to quantify temporal 
 \end{abstract}
 
 \tableofcontents
-\input{introduction/introduction}
+\include{introduction/introduction}
+\chapter{Theoretical Foundations \& Architecture}
+\include{chapter1_architecture/ch1_main}
 
 % \chapter{Theoretical Foundations \& Architecture}
 % \section{Hexagonal Architecture \& DIP}
@@ -66,6 +124,6 @@ Mapping natural language to high-dimensional metric spaces to quantify temporal 
 
 % --- Bibliography ---
 \bibliographystyle{plain}
-\bibliography{ref}
+\bibliography{references}
 
 \end{document}

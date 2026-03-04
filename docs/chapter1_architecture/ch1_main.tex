@@ -1,0 +1,52 @@
+% !TeX root = ../main.tex
+\section{Hexagonal Architecture \& DIP}
+
+The fundamental challenge in designing a distributed machine learning pipeline is preventing software entropy. If the algorithmic logic (e.g., semantic vector distance) becomes deeply coupled to the I/O mechanisms (e.g., PostgreSQL connections, FastAPI HTTP requests), the system becomes rigid, impossible to unit test deterministically, and highly susceptible to cascading failures.
+
+To enforce mathematical purity, the Semantic Document Engine strictly adheres to \textbf{Hexagonal Architecture} (Ports and Adapters), governed by the \textbf{Dependency Inversion Principle (DIP)}.
+
+\begin{semanticpanel}[The Dependency Inversion Principle]
+High-level modules must not depend on low-level modules. Both must depend on abstractions. Furthermore, abstractions must not depend on details; details must depend on abstractions.
+\end{semanticpanel}
+
+In practice, this means the dependency arrows must unconditionally point \textit{inward} toward the Core Domain, never outward. The Core Domain dictates the structural interfaces (Ports), and the Infrastructure layer must conform to them (Adapters).
+
+\vspace{1em}
+\begin{figure}[h]
+    \centering
+    \begin{tikzpicture}[
+        node distance=1.5cm and 2cm,
+        box/.style={rectangle, draw=DarkSlate, thick, rounded corners, minimum width=3.5cm, minimum height=1cm, align=center, font=\sffamily},
+        core/.style={box, fill=LightPink!20, draw=LightPink, very thick},
+        infra/.style={box, fill=LightBlue!20, draw=LightBlue, very thick},
+        arrow/.style={-{Stealth[scale=1.2]}, thick, DarkSlate}
+    ]
+
+        % Nodes
+        \node[core] (domain) {\textbf{Core Domain} \\ \footnotesize (Pure Math \& Entities)};
+        \node[core, above=of domain] (interfaces) {\textbf{Core Interfaces} \\ \footnotesize (Protocols / Ports)};
+
+        \node[infra, left=of interfaces] (postgres) {\textbf{PostgreSQL} \\ \footnotesize (Repository Adapter)};
+        \node[infra, right=of interfaces] (fastapi) {\textbf{FastAPI} \\ \footnotesize (Web Adapter)};
+
+        % FIX 1: Explicitly push Celery higher to clear the background box label
+        \node[infra, above=2.5cm of interfaces] (celery) {\textbf{Celery} \\ \footnotesize (Worker Adapter)};
+
+        % Background Box for Core
+        \begin{pgfonlayer}{background}
+            \node[draw=LightPink, fill=LightPink!5, dashed, rounded corners, fit=(domain)(interfaces), inner sep=0.5cm, label={[DarkSlate, font=\bfseries]north:Isolated System Locus}] (corebox) {};
+        \end{pgfonlayer}
+
+        % Dependency Arrows
+        \draw[arrow] (interfaces) -- (domain) node[midway, right, font=\small] {uses};
+        \draw[arrow] (postgres) -- (interfaces) node[midway, above, font=\small] {implements};
+        \draw[arrow] (fastapi) -- (interfaces) node[midway, above, font=\small] {uses};
+        \draw[arrow] (celery) -- (interfaces) node[midway, right, font=\small] {uses};
+
+    \end{tikzpicture}
+    \caption{The Dependency Inversion Graph. All I/O adapters depend strictly on the isolated Core Interfaces. The Core Domain remains mathematically unaware of the external network topology.}
+    \label{fig:hexagonal}
+\end{figure}
+\vspace{1em}
+
+By structuring the application as an inward-flowing Directed Acyclic Graph (DAG), we guarantee that a change in the SQL schema or a shift in the Celery configuration cannot physically alter the state-space of the Machine Learning mathematics.
