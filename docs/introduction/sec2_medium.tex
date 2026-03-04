@@ -1,0 +1,12 @@
+\section*{0.2 The Medium: Why build a distributed system to study this?}
+\addcontentsline{toc}{section}{0.2 The Medium: Why build a distributed system to study this?}
+
+Calculating the continuous N-body equivalent semantic drift over millions of documents is computationally intractable for a monolithic, single-threaded runtime. CPython is inherently bound by the Global Interpreter Lock (GIL), a mutex that prevents multiple native threads from executing Python bytecodes simultaneously.
+
+To overcome this hardware limit, the mathematical pure logic must be isolated from the system's I/O bounds. We construct a distributed architecture:
+\begin{itemize}
+    \item \textbf{Vector Retrieval:} Hardware-accelerated SIMD (Single Instruction, Multiple Data) instructions via PostgreSQL and Hierarchical Navigable Small World (HNSW) graph indexing to achieve $\mathcal{O}(\log N)$ vector distance calculations.
+    \item \textbf{Compute Segregation:} Spawning independent Linux processes bounded by `cgroups` (Celery workers) to bypass the GIL and compute matrix multiplications on isolated CPU cores.
+    \item \textbf{Asynchronous I/O:} Multiplexing network calls via the `epoll` syscall to stream state changes back to the client without blocking the server's event loop.
+\end{itemize}
+This system is not merely an application; it is a distributed, fault-tolerant state machine designed to scale horizontally across arbitrary compute nodes.
