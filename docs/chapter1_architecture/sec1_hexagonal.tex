@@ -8,7 +8,32 @@ To enforce mathematical purity, the Semantic Document Engine strictly adheres to
 High-level modules must not depend on low-level modules. Both must depend on abstractions. Furthermore, abstractions must not depend on details; details must depend on abstractions.
 \end{semanticpanel}
 
-In practice, this means the dependency arrows must unconditionally point \textit{inward} toward the Core Domain, never outward. The Core Domain dictates the structural interfaces (Ports), and the Infrastructure layer must conform to them (Adapters).
+
+In practice, this means the dependency arrows must unconditionally point \textit{inward} toward the Core Domain, never outward. We achieve this inversion of control through two distinct structural boundaries:
+
+\begin{itemize}
+    \item \textbf{Ports (The Interfaces):} The Core Domain dictates the contracts it requires to operate. It does not care how the data is retrieved, only that the data conforms to a specific shape. In Python, these Ports are implemented as Abstract Base Classes (\texttt{abc.ABC}) or structural \texttt{typing.Protocol} classes.
+    \item \textbf{Adapters (The Implementations):} The Infrastructure layer contains the concrete code that interacts with the outside world (e.g., the network, the disk). An adapter class imports the Port from the Core Domain and physically implements its methods.
+\end{itemize}
+
+To illustrate this, consider how our system fetches a vector. Instead of the Core Domain importing a PostgreSQL driver, the Core defines a \texttt{DocumentRepository} protocol. The Infrastructure layer then provides a \texttt{PgVectorRepository} that fulfills this protocol.
+
+\begin{lstlisting}[caption={Dependency Inversion using Python Protocols}]
+from typing import Protocol
+
+# 1. THE PORT (Lives inside the Core Domain)
+    def get_vector(self, doc_id: str) -> list[float]:
+        ...
+
+# 2. THE ADAPTER (Lives inside the Infra Layer)
+class PgVectorRepository:
+    def get_vector(self, doc_id: str) -> list[float]:
+        # Concrete SQL logic and network calls happen here
+        return [0.1, 0.2, 0.3]
+\end{lstlisting}
+
+This fundamentally flips traditional application design. Instead of the Core Domain relying on the database to exist, the Core dictates the mathematical reality, and it is the database's responsibility to conform to that reality.
+
 
 \vspace{1em}
 \begin{figure}[ht]
@@ -47,4 +72,4 @@ In practice, this means the dependency arrows must unconditionally point \textit
 \end{figure}
 \vspace{1em}
 
-By structuring the application as an inward-flowing Directed Acyclic Graph (DAG), we guarantee that a change in the SQL schema or a shift in the Celery configuration cannot physically alter the state-space of the Machine Learning mathematics.
+By structuring the application as an inward-flowing Directed Acyclic Graph (DAG), we guarantee that a change in the SQL schema, a version bump in the FastAPI router, or a shift in the Celery configuration cannot physically alter the state-space of the Machine Learning mathematics. The core vector calculations remain entirely isolated in pure Python memory, completely unaware of whether their inputs arrived via a TCP network socket or a local unit test sandbox.

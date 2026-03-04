@@ -15,16 +15,11 @@
 \usepackage[T1]{fontenc}
 \usepackage{microtype}      % Optical margin alignment and font expansion
 
-% --- Geometry (Asymmetric Margins) ---
+% --- Geometry (Full Width) ---
 \usepackage{geometry}
 \geometry{
     a4paper,
-    left=1.2in,
-    right=2in,  % Wide right margin for Tufte-style notes
-    top=1.2in,
-    bottom=1.2in,
-    marginparwidth=2in,
-    marginparsep=0.25in
+    margin=1.2in % Standard, balanced margins
 }
 
 % --- Color Space Allocation ---
@@ -33,6 +28,49 @@
 \definecolor{LightPink}{HTML}{F5A9B8}
 \definecolor{LightWhite}{HTML}{FFFFFF}
 \definecolor{DarkSlate}{HTML}{2B2B2B}
+
+% --- Syntax Highlighting Colors (IDE Theme) ---
+\definecolor{CodeBg}{HTML}{F6F8FA}
+\definecolor{CodeComment}{HTML}{6A737D}
+\definecolor{CodePurple}{HTML}{6F42C1}  % from, import, def, class, return
+\definecolor{CodeGreen}{HTML}{22863A}   % Types (list, float), Strings
+\definecolor{CodeBlue}{HTML}{005CC5}    % Args (self, kwargs)
+\definecolor{CodeGold}{HTML}{B08800}    % Functions and Class Names
+
+% --- Syntax Highlighting (Listings) ---
+\usepackage{listings}
+\lstset{
+    language=Python,
+    basicstyle=\ttfamily\small\color{DarkSlate},
+    backgroundcolor=\color{CodeBg},
+    showstringspaces=false,
+    breaklines=true,
+    frame=single,
+    rulecolor=\color{LightBlue!50},
+    numbers=left,
+    numberstyle=\tiny\color{CodeComment},
+    aboveskip=1.5em,
+    belowskip=1.5em,
+    xleftmargin=1.5em,
+    framexleftmargin=1em,
+    commentstyle=\color{CodeComment}\itshape,
+    stringstyle=\color{CodeGreen},
+    % Base Keywords (Purple)
+    keywordstyle=\color{CodePurple}\bfseries,
+    % Types (Green)
+    classoffset=1,
+    morekeywords={list, float, int, str, dict, Protocol},
+    keywordstyle=\color{CodeGreen},
+    % Arguments (Light Blue)
+    classoffset=2,
+    morekeywords={self, doc\_id, args, kwargs},
+    keywordstyle=\color{CodeBlue},
+    % Functions & Custom Classes (Gold)
+    classoffset=3,
+    morekeywords={get\_vector, DocumentRepository, PgVectorRepository},
+    keywordstyle=\color{CodeGold},
+    classoffset=0 % Reset to default
+}
 
 % --- Vector Graphics (TikZ) ---
 \usepackage{tikz}
