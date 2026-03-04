@@ -70,7 +70,7 @@ where $W^{(t)}$ represents the matrix of all localized word vectors at time $t$.
 
 To model the kinematics of semantic evolution, we must partition the historical corpus into discrete time windows, or \textbf{epochs} (e.g., $t_1 = 1990\text{-}1995$, $t_2 = 1996\text{-}2000$). Our objective is to track how the coordinate of a specific concept translates across these epochs.
 
-To understand this translation, we must precisely define what a ``concept'' is at the network level. Text is not fed into the model as whole words; it is decomposed into \textbf{tokens} using algorithms like WordPiece. A token is a sub-word unit optimized for information density. For example, while ``quantum'' might be a single token, ``qubits'' might be fractured into ``qu'' and ``##bits''. A token is the fundamental quanta of our linguistic phase space.
+To understand this translation, we must precisely define what a ``concept'' is at the network level. Text is not fed into the model as whole words; it is decomposed into \textbf{tokens} using algorithms like WordPiece. A token is a sub-word unit optimized for information density. For example, while ``quantum'' might be a single token, ``qubits'' might be fractured into ``qu'' and ``bits''. A token is the fundamental quanta of our linguistic phase space.
 
 There are two primary architectural paradigms for tracking a token's temporal trajectory, depending on how we handle the background manifold:
 
