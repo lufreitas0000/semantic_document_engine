@@ -21,14 +21,15 @@ To illustrate this, consider how our system fetches a vector. Instead of the Cor
 \begin{lstlisting}[caption={Dependency Inversion using Python Protocols}]
 from typing import Protocol
 
-# 1. THE PORT (Lives inside the Core Domain)
+# 1. THE PORT (Core Domain)
+class DocumentRepository(Protocol):
     def get_vector(self, doc_id: str) -> list[float]:
         ...
 
-# 2. THE ADAPTER (Lives inside the Infra Layer)
+# 2. THE ADAPTER (Infra Layer)
 class PgVectorRepository:
     def get_vector(self, doc_id: str) -> list[float]:
-        # Concrete SQL logic and network calls happen here
+        # SQL logic and network calls happen here ...
         return [0.1, 0.2, 0.3]
 \end{lstlisting}
 
@@ -72,4 +73,20 @@ This fundamentally flips traditional application design. Instead of the Core Dom
 \end{figure}
 \vspace{1em}
 
-By structuring the application as an inward-flowing Directed Acyclic Graph (DAG), we guarantee that a change in the SQL schema, a version bump in the FastAPI router, or a shift in the Celery configuration cannot physically alter the state-space of the Machine Learning mathematics. The core vector calculations remain entirely isolated in pure Python memory, completely unaware of whether their inputs arrived via a TCP network socket or a local unit test sandbox.
+%By structuring the application as an inward-flowing Directed Acyclic Graph (DAG), we guarantee that a change in the SQL schema, a version bump in the FastAPI router, or a shift in the Celery configuration cannot physically alter the state-space of the Machine Learning mathematics. The core vector calculations remain entirely isolated in pure Python memory, completely unaware of whether their inputs arrived via a TCP network socket or a local unit test sandbox.
+
+This inward-pointing structure represents a profound shift in standard \textbf{Object-Oriented Analysis and Design (OOAD)}. In a traditional \textbf{Layered Architecture}, dependencies flow top-down: the Presentation Layer depends on the Business Logic, which in turn strictly depends on the Database Layer. This approach fatally couples the application's core to its storage mechanism.
+
+To resolve this, our system adopts the principles of \textbf{Clean Architecture}, formalized by Robert C. Martin in 2012. Clean Architecture synthesizes Hexagonal design into a topological model of concentric rings. The inner rings are reserved exclusively for pure \textit{Entities} (our vector mathematics) and \textit{Use Cases} (our semantic tracking logic). The outer rings encapsulate all interfaces, web frameworks, external APIs, and databases. The golden rule of Clean Architecture is strict dependency inversion: source code dependencies must only point inward, from the outer infrastructure rings toward the inner domain rings.
+
+We enforce this boundary using \textbf{Inversion of Control (IoC)}. Often summarized by the Hollywood Principle---``Don't call us, we'll call you''---IoC dictates that the Core Domain never actively instantiates or calls external infrastructure. Instead, the Core Domain passively waits. In modern \textbf{Event-Driven Programming}, an external framework (such as our asynchronous \texttt{FastAPI} event loop) listens for external stimuli and dynamically triggers the Core Domain's pure functions.
+
+To make this externalization work without breaking the system, we rely heavily on \textbf{Dependency Injection}. Rather than the Core Domain executing a command to create its own database connection, the Infrastructure layer instantiates the \texttt{PgVectorRepository} and \textit{injects} it (passes it as an argument) into the Core Domain at runtime. This physically externalizes the infrastructure, ensuring loose coupling between the mathematical logic and the disk storage.
+
+%Ultimately, by structuring the application as an inward-flowing Directed Acyclic Graph (DAG), we guarantee that a change in the SQL schema, a version bump in the routing framework, or a shift in the \texttt{Celery} configuration cannot physically alter the state-space of the Machine Learning mathematics. The core vector calculations remain entirely isolated in pure Python memory, completely unaware of whether their inputs arrived via a TCP network socket or a local unit test sandbox.
+
+Ultimately, the primary goal of this architecture is to structure the application's module dependencies as an inward-flowing \textbf{Directed Acyclic Graph (DAG)}. In graph theory, a DAG is a topological structure where edges point in exactly one direction (Directed) and never loop back upon themselves (Acyclic). In software engineering, this means if the Infrastructure module imports the Core Domain, the Core Domain is strictly prohibited from importing the Infrastructure module. This acyclic property is critical: it completely eliminates circular import errors---a notorious cause of runtime deadlocks in Python---and guarantees that the system can be logically reasoned about from the inside out.
+
+By enforcing this strict, one-way topological flow, we guarantee that changes to the external environment cannot propagate inward to corrupt the mathematical logic. For instance, consider a modification to the \textbf{SQL schema}---the rigid, tabular blueprint defining the exact tables, columns, constraints, and data types stored in our PostgreSQL database. If a database administrator alters a table structure or swaps a standard array for a \texttt{pgvector} tensor, that structural mutation remains trapped entirely within the outer Repository Adapter. The Core Domain never sees the SQL query; it only sees the pure Python \texttt{list[float]} returned by the Port.
+
+Similarly, a version bump in the \texttt{FastAPI} web router, or a shift in the \texttt{Celery} asynchronous worker configuration, cannot physically alter the state-space of the Machine Learning computations. The core vector mathematics remain completely isolated in pure Python memory. They compute topological distances and semantic drift completely unaware of whether their input tensors arrived via a live TCP network socket, a distributed message queue, or a local \texttt{pytest} sandbox.
