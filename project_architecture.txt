@@ -1,0 +1,73 @@
+.
+├── Makefile
+├── README.md
+├── Semantic DB Local.session.sql
+├── alembic.ini
+├── assert
+├── docker-compose.yml
+├── frontend
+│   └── app.py
+├── migrations
+│   ├── README
+│   ├── env.py
+│   ├── script.py.mako
+│   └── versions
+│       ├── 0f6bda5e058a_verify.py
+│       ├── 21178132d92e_feat_add_vector_embedding_column.py
+│       ├── 51ab2670c483_chore_initialize_core_document_tables.py
+│       └── 7af71ea46719_feat_add_analytics_metadata_and_scibert.py
+├── project_architecture.txt
+├── pytest.ini
+├── requirements.in
+├── requirements.txt
+└── semantic_engine
+    ├── __init__.py
+    ├── app_ingestion
+    │   ├── __init__.py
+    │   └── workflows.py
+    ├── app_ml_analysis
+    │   └── __init__.py
+    ├── app_web_ui
+    │   └── __init__.py
+    ├── core_interfaces
+    │   ├── __init__.py
+    │   ├── api.py
+    │   ├── domain.py
+    │   ├── ml.py
+    │   ├── repository.py
+    │   └── uow.py
+    ├── infrastructure
+    │   ├── __init__.py
+    │   ├── api
+    │   │   ├── arxiv.py
+    │   │   └── semantic_scholar.py
+    │   ├── database
+    │   │   ├── __init__.py
+    │   │   ├── models.py
+    │   │   ├── repository.py
+    │   │   └── uow.py
+    │   ├── ml
+    │   │   ├── __init__.py
+    │   │   └── sentence_transformer.py
+    │   └── worker
+    │       ├── celery_app.py
+    │       └── tasks.py
+    ├── main.py
+    └── tests
+        ├── __init__.py
+        ├── cassettes
+        │   └── arxiv_quantum_query.yaml
+        ├── conftest.py
+        ├── test_api.py
+        ├── test_arxiv.py
+        ├── test_database.py
+        ├── test_ingestion.py
+        ├── test_ml.py
+        ├── test_repository.py
+        ├── test_repository_integration.py
+        ├── test_ui.py
+        ├── test_uow.py
+        └── test_workflows.py
+
+16 directories, 54 files
+tree -I '.venv|.git|docs|__pycache__|.pytest_cache' > project_architecture.txt
