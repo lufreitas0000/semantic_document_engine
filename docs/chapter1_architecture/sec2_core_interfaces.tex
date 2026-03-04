@@ -1,0 +1,237 @@
+
+\subsubsection*{1. The Domain Entity (\texttt{domain.py})}
+
+The fundamental data entity of the architecture is the academic paper. We define this using a pure data structure. While the actual repository contains extensive metadata fields (citation counts, authors, publication dates), we present a structurally simplified version here for clarity:
+
+\begin{lstlisting}[caption={Simplified Domain Entity}]
+from dataclasses import dataclass
+from typing import Optional
+
+@dataclass(frozen=True)
+class DocumentMetadata:
+    id: str
+    title: str
+    abstract: str
+    embedding: Optional[list[float]] = None
+\end{lstlisting}
+
+In traditional Object-Oriented Programming, a class is designed to encapsulate both state (data) and behavior (methods). However, in our Core Domain, this entity is stripped of all behavior. It is a \textbf{pure construction}. We are not using the class to execute imperative logic; we are using it purely as a mathematical container and a custom Type. In the language of category theory, this class acts as a rigid codomain. It guarantees that no matter where the raw bytes originate---whether scraped from an arXiv XML feed or fetched from a Semantic Scholar JSON payload---they enter our pure mathematical core in an exact, predictable shape.
+
+Crucially, we enforce this purity using the \texttt{frozen=True} parameter. This instructs the Python interpreter to make the object \textbf{immutable} immediately after instantiation. If an outer Infrastructure layer (like a database adapter) attempts to modify the document's abstract after creation, the interpreter will throw a fatal \texttt{FrozenInstanceError}. To change the state, the system must mathematically map the old object to a completely new instance. This functional paradigm completely eliminates unintended side effects and guarantees thread-safety when passing these documents across asynchronous \texttt{Celery} workers.
+
+This immutability has profound implications for how the Python object is managed at the hardware level. Traditionally, Python objects are highly dynamic; they store their arbitrary attributes in an underlying hash map known as the \texttt{\_\_dict\_\_}. This allows developers to add new variables at runtime, but it forces the interpreter to constantly resize the hash map, leading to memory fragmentation. By freezing the dataclass, we lock the internal pointers. It is important to clarify that this does not compress the Python object into a perfectly contiguous C-style struct (as the standard Python \texttt{list} is still an array of heap pointers), but it completely arrests the dynamic expansion of the object's footprint. When processing $1.14$ million documents in a single pipeline, preventing dynamic dictionary resizing saves gigabytes of RAM overhead.
+
+We further protect the system's RAM using the \texttt{Optional[list[float]] = None} type hint. A Transformer embedding is typically a dense vector of $768$ floating-point numbers. In a 64-bit Python environment, a single list of 768 floats consumes several kilobytes of memory. If we run a PostgreSQL query to fetch 1 million document titles to populate a web dashboard, and SQLAlchemy loads those 1 million \texttt{DocumentMetadata} objects into RAM, eagerly loading the vector embeddings alongside them would instantly trigger an Out-Of-Memory (OOM) fatal crash.
+
+By defaulting the embedding to \texttt{None}, we utilize lazy allocation. The \texttt{None} object in Python is a global singleton; it consumes effectively zero bytes per instance. The massive arrays of floats are never allocated into Python's RAM unless a specific ML use case explicitly requests them. For the vast majority of operations, the heavy vector algebra is entirely delegated to the \texttt{pgvector} C-extension inside the database, and the Python application only ever handles the lightweight metadata.
+
+
+\textbf{The \texttt{@dataclass} Decorator} \\
+In standard Python, creating a class strictly for data storage requires writing tedious, boilerplate ``dunder'' (double underscore) methods. The \texttt{@dataclass} decorator acts as a compile-time macro. When the Python interpreter loads this module, it intercepts the class definition and automatically generates the \texttt{\_\_init\_\_()} constructor, the \texttt{\_\_repr\_\_()} string representation, and the \texttt{\_\_eq\_\_()} equality operators based purely on the type-hinted attributes. This guarantees that two \texttt{DocumentMetadata} instances with identical IDs and abstracts evaluate as mathematically equal without requiring custom logic, enforcing value-based equality.
+
+%To enforce this pure data structure without writing tedious, boilerplate ``dunder'' (double underscore) methods, we utilize the \texttt{@dataclass} decorator. It acts as a compile-time macro. When the Python interpreter loads this module, it intercepts the class definition and automatically generates the \texttt{\_\_init\_\_()} constructor, the \texttt{\_\_repr\_\_()} string representation, and the \texttt{\_\_eq\_\_()} equality operators based purely on the type-hinted attributes. This guarantees that two \texttt{DocumentMetadata} instances with identical IDs and abstracts evaluate as mathematically equal without requiring custom logic, natively enforcing value-based equality.
+
+
+
+
+
+
+
+
+\subsubsection*{2. The Service Ports (\texttt{api.py} and \texttt{ml.py})}
+
+With the base data structure defined, we must establish the abstract contracts for populating it. The engine requires two external boundaries: an API to fetch the academic literature, and an embedding model to translate that text into a continuous mathematical vector.
+
+Architecturally, we name these interfaces \textbf{Service Ports}. The term ``Port'' stems directly from Hexagonal Architecture, denoting a docking point at the boundary of the Core Domain where an external Adapter can plug in. We use the prefix ``Service'' to distinguish them from ``Repositories''; while a repository handles the passive storage of state, a service executes an active domain operation that fundamentally requires external I/O or heavy computation.
+
+By ``continuous,'' we refer to mapping discrete, isolated categorical strings (human words) into a dense array of floating-point numbers ($\mathbb{R}^d$). In this continuous space, unlike a discrete boolean search, relationships between concepts can be smoothly measured using geometric angles and distances.
+
+\begin{lstlisting}[caption={External Service Protocols}]
+from typing import Protocol, AsyncGenerator
+from core_interfaces.domain import DocumentMetadata
+
+# From api.py
+class AcademicGraphPort(Protocol):
+    def fetch_documents(
+        self, query: str, limit: int = 5
+    ) -> AsyncGenerator[DocumentMetadata, None]:
+        ...
+
+# From ml.py
+class TextEmbeddingPort(Protocol):
+    def generate_embedding(self, text: str) -> list[float]:
+        ...
+\end{lstlisting}
+
+For researchers transitioning from imperative scripting to Object-Oriented Programming (OOP), the basic syntax warrants a quick breakdown:
+\begin{itemize}
+    \item \textbf{\texttt{Protocol}:} By inheriting from \texttt{typing.Protocol}, we declare that these classes are \textit{not} meant to be executed. They contain no logic (denoted by the \texttt{...} ellipsis\footnote{This is not pseudo-code; the ellipsis is actually the entire body of the function!}). They act purely as structural blueprints. Any external adapter that implements a \texttt{fetch\_documents} method with the exact same inputs and outputs is automatically recognized as valid by Python's type checker (a concept known as structural subtyping, or ``duck typing'').
+    \item \textbf{The \texttt{self} Argument:} In Python, \texttt{self} represents the specific instance of the class being operated on. When we eventually call \texttt{adapter.fetch\_documents("quantum")}, the interpreter automatically passes the \texttt{adapter} object as the invisible first argument. Therefore, \texttt{self} is required in the definition, but omitted during execution.
+    \item \textbf{Type Hints (\texttt{:} and \texttt{->}):} The variables \texttt{query} and \texttt{limit} define the exact input parameters. The colon dictates the required input type. The arrow (\texttt{->}) explicitly dictates what the function is guaranteed to return. This transforms arbitrary Python code into a mathematically verifiable contract.
+\end{itemize}
+
+\textbf{Memory Safety via Asynchronous Generators} \\
+A standard Python function computes its entire result in memory and terminates via a \texttt{return} statement. If we asked the API to fetch 10,000 documents, returning a standard \texttt{list} would freeze the application and spike the RAM.
+
+To prevent this, the \texttt{fetch\_documents} port requires an \textbf{\texttt{AsyncGenerator}}. Generators do not \texttt{return}; they \texttt{yield}. When the adapter fetches a document, it \texttt{yield}s that single \texttt{DocumentMetadata} object to the application and instantly pauses its internal execution state. When the application is ready for the next document, it calls the \texttt{\_\_anext\_\_()} method, and the generator resumes exactly where it left off. Because this is an \textit{asynchronous} generator, it utilizes the \texttt{await} keyword during network calls. While the generator is paused waiting for arXiv's servers to respond, it yields control of the CPU back to the event loop, allowing the engine to handle other users' requests concurrently.
+
+\textbf{Type Theory: The \texttt{None} Parameter and Unidirectional Pipelines} \\
+In Python, a generator is not just a one-way iterator; it is a \textit{coroutine}. When a generator is paused at a \texttt{yield} statement, the consuming application can actually inject data back into the generator using the \texttt{send()} method. This allows the application to alter the generator's behavior ``mid-cycle'' before it fetches the next item.
+
+Our architecture strictly forbids this. We require a rigid, unidirectional pipeline where the external API adapter acts solely as a producer, and the Core Domain acts solely as a consumer.
+
+We enforce this boundary using the type hint: \texttt{AsyncGenerator[\allowbreak{}DocumentMetadata, None]}. The first parameter dictates what the generator yields out (\texttt{DocumentMetadata}). The second parameter dictates what the generator accepts back in via the \texttt{send()} method. By explicitly setting this to \texttt{None}, we utilize static type analysis (via tools like \texttt{mypy}) as a formal mathematical proof.
+
+In type theory, type hints act as logical axioms. If a developer attempts to write code that calls \texttt{adapter.send(new\_query)}, the static analyzer evaluates this against our \texttt{None} axiom and immediately fails the CI/CD build. We have proven, deterministically and before the code ever executes, that data flows exclusively from the external infrastructure into the Core Domain, and never in reverse.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+\subsubsection*{3. The Repository Port (\texttt{repository.py})}
+
+Once a document is fetched from an external API and its mathematical embedding is generated, it exists solely within the server's RAM. Because RAM is volatile, the data will be permanently destroyed the moment the Python process terminates. To achieve system longevity, we must persist this state to a hard drive using a database engine (specifically, a Relational SQL Database).
+
+However, writing raw SQL queries (\texttt{INSERT INTO documents...}) directly inside our core Python logic would instantly violate the Dependency Inversion Principle. It would tightly couple our mathematical domain to the specific syntax and drivers of PostgreSQL.
+
+To solve this, we define the \textbf{Repository Port}.
+
+Architecturally, why do we call this a ``Repository'' rather than a ``Service''? A Service Port implies an active, often unpredictable external computation (like calling an external API or running a neural network). A Repository, by contrast, is an architectural pattern designed to mediate between the domain and the data mapping layers. From the perspective of the Core Domain, a Repository should look and act exactly like a standard, in-memory Python collection (like a \texttt{list} or \texttt{dict}). The Core Domain simply appends or retrieves objects from this ``collection,'' completely unaware that beneath the surface, an external adapter is translating those operations into complex SQL transactions.
+
+\begin{lstlisting}[caption={The Repository Protocol}]
+from typing import Protocol
+from core_interfaces.domain import DocumentMetadata
+
+class DocumentRepository(Protocol):
+    def add(self, document: DocumentMetadata) -> None:
+        ...
+
+    def get(self, doc_id: str) -> DocumentMetadata:
+        ...
+
+    def find_similar(
+        self, vector: list[float], limit: int = 10
+    ) -> list[DocumentMetadata]:
+        ...
+\end{lstlisting}
+
+This Port defines three fundamental persistence operations:
+\begin{itemize}
+    \item \textbf{\texttt{add}:} Accepts our pure \texttt{DocumentMetadata} entity and guarantees it will be stored.
+    \item \textbf{\texttt{get}:} Reconstitutes a document from storage back into RAM based on its unique ID.
+    \item \textbf{\texttt{find\_similar}:} The mathematical heart of the engine. It accepts a dense vector ($\mathbb{R}^d$) and returns a list of the closest documents in the topological space.
+\end{itemize}
+
+Later in the architecture, this specific Port will be fulfilled by adapters residing in the \texttt{infrastructure/\allowbreak{}database/} directory. Specifically, we will construct a \texttt{PgVectorRepository} adapter that implements these three methods using \texttt{SQLAlchemy} and the \texttt{pgvector} C-extension, handling the complex underlying table joins and Hierarchical Navigable Small World (HNSW) indices. But to the Core Domain, all of that infrastructure is invisible; it simply sees a contract to store and retrieve pure Python objects.
+
+
+
+
+
+
+\subsubsection*{4. The Unit of Work (\texttt{uow.py})}
+
+We have defined the fundamental entity, the Service Port to fetch it, and the Repository Port to store it. However, a real-world application rarely performs a single isolated action. A standard use case might involve fetching a document, generating its embedding, saving the metadata to a relational table, and saving the vector to a high-dimensional index.
+
+This introduces a critical vulnerability regarding \textbf{state transitions}. The database exists in a valid State A. If the system successfully saves the metadata but crashes due to a network timeout before saving the vector, the database is left in a corrupted, intermediate state. We have a document with no vector, violating our mathematical expectations.
+
+To solve this, we implement the \textbf{Unit of Work (UoW)} pattern. The UoW acts as a strict boundary that groups multiple operations into a single logical transaction. It guarantees the \textbf{ACID} properties of our database:
+\begin{itemize}
+    \item \textbf{Atomicity:} The entire group of operations is treated as a single indivisible atom. Either every operation succeeds (\texttt{commit}), or the entire group is aborted and the database reverts to State A (\texttt{rollback}).
+    \item \textbf{Consistency:} The transaction guarantees the database only moves from one valid state to another, never lingering in a corrupted intermediate state.
+    \item \textbf{Isolation:} Concurrent requests (e.g., two researchers updating the same document) cannot read each other's intermediate, uncommitted changes.
+    \item \textbf{Durability:} Once the UoW issues a \texttt{commit}, the data is permanently written to the physical disk.
+\end{itemize}
+
+\begin{lstlisting}[caption={The Unit of Work Protocol}]
+from typing import Protocol, Self
+from core_interfaces.repository import DocumentRepository
+
+class AbstractUnitOfWork(Protocol):
+    documents: DocumentRepository
+    def __enter__(self) -> Self:        ...
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:        ...
+    def commit(self) -> None:        ...
+    def rollback(self) -> None:        ...
+\end{lstlisting}
+
+To orchestrate these ACID transactions cleanly, the UoW protocol dictates the use of a Python \textbf{Context Manager}, defined by the \texttt{\_\_enter\_\_} and \texttt{\_\_exit\_\_} ``dunder'' methods. This allows the system to use the \texttt{with} statement, providing mathematically rigorous error handling without deeply nested boilerplate.
+
+Consider the following execution block:
+\begin{lstlisting}[caption={Context Manager Execution}]
+with uow:
+    uow.documents.add(new_document)
+    uow.commit()
+\end{lstlisting}
+
+Under the hood, the Python interpreter translates that elegant \texttt{with} block into an explicit, highly defensive \texttt{try/except/finally} structure. It calls \texttt{\_\_enter\_\_()} to initialize the database transaction. It then executes the code block. If \textit{any} error occurs (a memory fault, a disconnected cable), the interpreter immediately intercepts the exception and routes it to the \texttt{\_\_exit\_\_()} method, which we configure to issue a \texttt{rollback()} and safely close the database connection. This prevents the server from leaking memory or locking tables during a crash.
+
+A final note on type theory: in older Python codebases, developers had to use string literals (e.g., \texttt{-> 'AbstractUnitOfWork'}) when a class needed to return an instance of itself. Because the Python interpreter reads files top-to-bottom, the class is not fully constructed in memory when the method signature is parsed, resulting in a \texttt{NameError}. Modern Python (3.11+) resolves this via the \texttt{typing.Self} attribute. By declaring \texttt{-> Self}, the static analyzer mathematically understands that \texttt{\_\_enter\_\_} returns an instance of whatever concrete Adapter eventually implements this Protocol.
+
+By reading \texttt{core\_interfaces/}, a developer can understand the entire capabilities of the system---fetching, embedding, storing, and transaction management---without ever looking at a single line of SQL or HTTP request code.
+
+
+
+
+
+
+
+
+\subsubsection*{4. The Unit of Work (\texttt{uow.py})}
+
+We have defined the fundamental entity, the Service Port to fetch it, and the Repository Port to store it. However, a real-world application rarely performs a single isolated action. A standard pipeline involves fetching a document, generating its embedding, saving the metadata to a relational table, and saving the vector to a high-dimensional index.
+
+This introduces a critical vulnerability regarding state transitions. The database exists in a valid state. If the system successfully saves the metadata but throws a network exception before saving the vector, the database is left in a corrupted, intermediate state.
+
+To solve this, we implement the \textbf{Unit of Work (UoW)} pattern. The UoW acts as a strict boundary that groups multiple operations into a single logical transaction, guaranteeing the ACID properties (Atomicity, Consistency, Isolation, Durability) of the database.
+
+\begin{lstlisting}[caption={The Unit of Work Protocol}]
+from typing import Protocol, Self
+from core_interfaces.repository import DocumentRepository
+
+class AbstractUnitOfWork(Protocol):
+    documents: DocumentRepository
+    def __enter__(self) -> Self:        ...
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:        ...
+    def commit(self) -> None:        ...
+    def rollback(self) -> None:        ...
+\end{lstlisting}
+
+\textbf{Type Theory and the Repository Namespace} \\
+As in our previous interfaces, inheriting from \texttt{Protocol} designates this class strictly as a structural blueprint. The \texttt{documents} attribute requires special attention. The name \texttt{documents} is plural, which might suggest a list, but the type hint explicitly declares it as a single \texttt{DocumentRepository} instance. We name it this way so that it acts as a fluent namespace during execution. Abstractly, the domain uses it as if interacting with a collection: \texttt{uow.documents.add(doc)} or \texttt{uow.documents.get(id)}.
+
+Furthermore, the \texttt{\_\_enter\_\_} method utilizes the \texttt{typing.Self} return type. In older Python versions, referencing a class within its own definition required string literals (e.g., \texttt{-> 'AbstractUnitOfWork'}) because the class was not fully constructed in memory during parsing. The \texttt{Self} type is a modern, mathematically rigorous way to declare that this method returns the exact instance of the concrete adapter implementing the Protocol.
+
+\textbf{The Context Manager and Execution Mechanics} \\
+The UoW orchestrates transactions via a Python Context Manager, defined by the \texttt{\_\_enter\_\_} and \texttt{\_\_exit\_\_} methods, which enables the \texttt{with} statement.
+
+\begin{lstlisting}[caption={Context Manager Execution}]
+with uow:
+    uow.documents.add(new_document)
+    uow.commit()
+\end{lstlisting}
+
+When the \texttt{with} block begins, the interpreter calls \texttt{\_\_enter\_\_}, which initializes the database transaction. It then executes the inner code. When the block finishes, the interpreter calls \texttt{\_\_exit\_\_}, passing three parameters: \texttt{exc\_type}, \texttt{exc\_val}, and \texttt{exc\_tb}. If the block executes perfectly, these parameters are \texttt{None}. If an exception occurs (e.g., a \texttt{TimeoutError}), Python captures the exception type, value, and traceback, and passes them to \texttt{\_\_exit\_\_}. Our concrete implementation will inspect these parameters; if an exception is present, it explicitly triggers a \texttt{rollback()} to revert the database state.
+
+\textbf{Durability and the Write-Ahead Log (WAL)} \\
+If no exceptions occur, the application calls \texttt{commit()}. A commit is the explicit command that permanently applies the transaction's mutations to the database. At the hardware level, relational databases (like PostgreSQL) achieve this via the Write-Ahead Log (WAL). The database does not immediately write the new data to the main table files on the disk, as random I/O is slow. Instead, it sequentially appends the exact state changes to a highly optimized append-only file (the WAL). A commit is only considered successful once the WAL is physically synced to the disk. If the server loses power a millisecond later, upon reboot, it reads the WAL and reapplies the changes, guaranteeing absolute durability.
+
+\textbf{Concurrency Control in Asynchronous Environments} \\
+Because our engine relies on asynchronous cooperative multitasking (yielding the CPU during network waits), a single Python process will handle hundreds of concurrent UoW transactions simultaneously. This concurrency risks severe database anomalies:
+\begin{itemize}
+    \item \textbf{Dirty Reads:} Transaction B reads data that Transaction A has written but not yet committed. If A rolls back, B is operating on phantom data.
+    \item \textbf{Lost Updates:} Transactions A and B both read the same row. A modifies and commits it. B modifies its stale copy and commits it, silently overwriting A's work.
+\end{itemize}
+
+Historically, databases solved this via \textbf{Locking}---pessimistically freezing rows or entire tables so only one transaction could read or write at a time, creating massive performance bottlenecks.
+
+Instead, our infrastructure relies on PostgreSQL's \textbf{Multi-Version Concurrency Control (MVCC)}. Under MVCC, a transaction does not lock a row when reading it. Instead, the database creates a localized, immutable snapshot of the data state at the exact moment the \texttt{with uow} block begins. If another transaction updates a row, PostgreSQL creates a entirely new hidden version of that row. Readers only ever see their specific temporal snapshot, completely insulated from concurrent writers. The UoW Protocol abstracts this immense complexity: the Python Core Domain operates mathematically on its local snapshot, while the Infrastructure Adapter manages the MVCC boundary.

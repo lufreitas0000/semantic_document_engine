@@ -26,6 +26,7 @@ class SqlAlchemyDocumentRepository:
             return self._to_domain(record)
         return None
 
+    # remove it and use find_similar
     def get_all(self, limit: int = 10) -> list[DocumentMetadata]:
         """
         Executes a single SQL query to fetch N records.
@@ -36,7 +37,7 @@ class SqlAlchemyDocumentRepository:
         records = self.session.scalars(stmt).all()
         return [self._to_domain(record) for record in records]
 
-
+    # change to find_similar / strip  the distance
     def search_by_embedding(self, query_embedding: list[float], limit: int = 5) -> list[tuple[DocumentMetadata, float]]:
         vector_length = len(query_embedding)
         if vector_length == 384:
