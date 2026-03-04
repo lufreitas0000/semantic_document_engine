@@ -138,46 +138,46 @@ Later in the architecture, this specific Port will be fulfilled by adapters resi
 
 
 
-\subsubsection*{4. The Unit of Work (\texttt{uow.py})}
+% \subsubsection*{4. The Unit of Work (\texttt{uow.py})}
 
-We have defined the fundamental entity, the Service Port to fetch it, and the Repository Port to store it. However, a real-world application rarely performs a single isolated action. A standard use case might involve fetching a document, generating its embedding, saving the metadata to a relational table, and saving the vector to a high-dimensional index.
+% We have defined the fundamental entity, the Service Port to fetch it, and the Repository Port to store it. However, a real-world application rarely performs a single isolated action. A standard use case might involve fetching a document, generating its embedding, saving the metadata to a relational table, and saving the vector to a high-dimensional index.
 
-This introduces a critical vulnerability regarding \textbf{state transitions}. The database exists in a valid State A. If the system successfully saves the metadata but crashes due to a network timeout before saving the vector, the database is left in a corrupted, intermediate state. We have a document with no vector, violating our mathematical expectations.
+% This introduces a critical vulnerability regarding \textbf{state transitions}. The database exists in a valid State A. If the system successfully saves the metadata but crashes due to a network timeout before saving the vector, the database is left in a corrupted, intermediate state. We have a document with no vector, violating our mathematical expectations.
 
-To solve this, we implement the \textbf{Unit of Work (UoW)} pattern. The UoW acts as a strict boundary that groups multiple operations into a single logical transaction. It guarantees the \textbf{ACID} properties of our database:
-\begin{itemize}
-    \item \textbf{Atomicity:} The entire group of operations is treated as a single indivisible atom. Either every operation succeeds (\texttt{commit}), or the entire group is aborted and the database reverts to State A (\texttt{rollback}).
-    \item \textbf{Consistency:} The transaction guarantees the database only moves from one valid state to another, never lingering in a corrupted intermediate state.
-    \item \textbf{Isolation:} Concurrent requests (e.g., two researchers updating the same document) cannot read each other's intermediate, uncommitted changes.
-    \item \textbf{Durability:} Once the UoW issues a \texttt{commit}, the data is permanently written to the physical disk.
-\end{itemize}
+% To solve this, we implement the \textbf{Unit of Work (UoW)} pattern. The UoW acts as a strict boundary that groups multiple operations into a single logical transaction. It guarantees the \textbf{ACID} properties of our database:
+% \begin{itemize}
+%     \item \textbf{Atomicity:} The entire group of operations is treated as a single indivisible atom. Either every operation succeeds (\texttt{commit}), or the entire group is aborted and the database reverts to State A (\texttt{rollback}).
+%     \item \textbf{Consistency:} The transaction guarantees the database only moves from one valid state to another, never lingering in a corrupted intermediate state.
+%     \item \textbf{Isolation:} Concurrent requests (e.g., two researchers updating the same document) cannot read each other's intermediate, uncommitted changes.
+%     \item \textbf{Durability:} Once the UoW issues a \texttt{commit}, the data is permanently written to the physical disk.
+% \end{itemize}
 
-\begin{lstlisting}[caption={The Unit of Work Protocol}]
-from typing import Protocol, Self
-from core_interfaces.repository import DocumentRepository
+% \begin{lstlisting}[caption={The Unit of Work Protocol}]
+% from typing import Protocol, Self
+% from core_interfaces.repository import DocumentRepository
 
-class AbstractUnitOfWork(Protocol):
-    documents: DocumentRepository
-    def __enter__(self) -> Self:        ...
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:        ...
-    def commit(self) -> None:        ...
-    def rollback(self) -> None:        ...
-\end{lstlisting}
+% class AbstractUnitOfWork(Protocol):
+%     documents: DocumentRepository
+%     def __enter__(self) -> Self:        ...
+%     def __exit__(self, exc_type, exc_val, exc_tb) -> None:        ...
+%     def commit(self) -> None:        ...
+%     def rollback(self) -> None:        ...
+% \end{lstlisting}
 
-To orchestrate these ACID transactions cleanly, the UoW protocol dictates the use of a Python \textbf{Context Manager}, defined by the \texttt{\_\_enter\_\_} and \texttt{\_\_exit\_\_} ``dunder'' methods. This allows the system to use the \texttt{with} statement, providing mathematically rigorous error handling without deeply nested boilerplate.
+% To orchestrate these ACID transactions cleanly, the UoW protocol dictates the use of a Python \textbf{Context Manager}, defined by the \texttt{\_\_enter\_\_} and \texttt{\_\_exit\_\_} ``dunder'' methods. This allows the system to use the \texttt{with} statement, providing mathematically rigorous error handling without deeply nested boilerplate.
 
-Consider the following execution block:
-\begin{lstlisting}[caption={Context Manager Execution}]
-with uow:
-    uow.documents.add(new_document)
-    uow.commit()
-\end{lstlisting}
+% Consider the following execution block:
+% \begin{lstlisting}[caption={Context Manager Execution}]
+% with uow:
+%     uow.documents.add(new_document)
+%     uow.commit()
+% \end{lstlisting}
 
-Under the hood, the Python interpreter translates that elegant \texttt{with} block into an explicit, highly defensive \texttt{try/except/finally} structure. It calls \texttt{\_\_enter\_\_()} to initialize the database transaction. It then executes the code block. If \textit{any} error occurs (a memory fault, a disconnected cable), the interpreter immediately intercepts the exception and routes it to the \texttt{\_\_exit\_\_()} method, which we configure to issue a \texttt{rollback()} and safely close the database connection. This prevents the server from leaking memory or locking tables during a crash.
+% Under the hood, the Python interpreter translates that elegant \texttt{with} block into an explicit, highly defensive \texttt{try/except/finally} structure. It calls \texttt{\_\_enter\_\_()} to initialize the database transaction. It then executes the code block. If \textit{any} error occurs (a memory fault, a disconnected cable), the interpreter immediately intercepts the exception and routes it to the \texttt{\_\_exit\_\_()} method, which we configure to issue a \texttt{rollback()} and safely close the database connection. This prevents the server from leaking memory or locking tables during a crash.
 
-A final note on type theory: in older Python codebases, developers had to use string literals (e.g., \texttt{-> 'AbstractUnitOfWork'}) when a class needed to return an instance of itself. Because the Python interpreter reads files top-to-bottom, the class is not fully constructed in memory when the method signature is parsed, resulting in a \texttt{NameError}. Modern Python (3.11+) resolves this via the \texttt{typing.Self} attribute. By declaring \texttt{-> Self}, the static analyzer mathematically understands that \texttt{\_\_enter\_\_} returns an instance of whatever concrete Adapter eventually implements this Protocol.
+% A final note on type theory: in older Python codebases, developers had to use string literals (e.g., \texttt{-> 'AbstractUnitOfWork'}) when a class needed to return an instance of itself. Because the Python interpreter reads files top-to-bottom, the class is not fully constructed in memory when the method signature is parsed, resulting in a \texttt{NameError}. Modern Python (3.11+) resolves this via the \texttt{typing.Self} attribute. By declaring \texttt{-> Self}, the static analyzer mathematically understands that \texttt{\_\_enter\_\_} returns an instance of whatever concrete Adapter eventually implements this Protocol.
 
-By reading \texttt{core\_interfaces/}, a developer can understand the entire capabilities of the system---fetching, embedding, storing, and transaction management---without ever looking at a single line of SQL or HTTP request code.
+% By reading \texttt{core\_interfaces/}, a developer can understand the entire capabilities of the system---fetching, embedding, storing, and transaction management---without ever looking at a single line of SQL or HTTP request code.
 
 
 
