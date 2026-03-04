@@ -5,7 +5,27 @@
 \chapter*{Introduction: The Objective and the Medium}
 \addcontentsline{toc}{chapter}{Introduction: The Objective and the Medium}
 
-This monograph defines the theoretical and engineering framework for the Semantic Document Engine. We establish a bridge between high-dimensional geometry and distributed systems architecture to compute the temporal evolution of academic literature.
+The scientific community generates an ever-expanding, decentralized corpus of literature. Open-access preprint repositories, such as arXiv, effectively serve as an historical record of human intellectual interests. As this database scales to millions of documents, a fundamental epistemic question arises: how do we rigorously measure (and maybe predict) the trajectory of scientific thought?
+
+To understand the dynamics of this dataset, we must first establish the baseline metrics traditionally used to quantify publication trends. If we view the repository as a temporal database, we can extract several measurements:
+
+\begin{enumerate}
+    \item \textbf{Volume and Velocity (Scalar Metrics):} The most naive approach is to measure the first derivative of publication count with respect to time ($\frac{dN}{dt}$). For example, in the last decade, the volume of papers in Artificial Intelligence has exhibited exponential growth, heavily skewing the global distribution of academic output.
+    \item \textbf{Citation Networks (Graph Theory):} By treating each paper as a node and each citation as a directed edge, we construct a Directed Acyclic Graph (DAG). Algorithms like PageRank or Eigenvector Centrality can identify ``hub'' papers that disproportionately influence future research.
+    \item \textbf{Lexical Frequency (Statistical NLP):} We can track the raw occurrence of specific keywords over time using algorithms like TF-IDF (Term Frequency-Inverse Document Frequency), which normalizes the frequency of a word by how rare it is across the entire corpus.
+\end{enumerate}
+
+Using these traditional metrics, we can observe macro-trends over the last decade. Artificial Intelligence transitioned from a niche statistical discipline into a dominant force following the widespread adoption of deep neural networks. Nuclear energy research, previously stagnant, has seen a localized resurgence in the literature driven by recent breakthroughs in plasma confinement for nuclear fusion (e.g., the NIF ignition threshold) and renewed geopolitical interest in zero-carbon baseload power.
+
+However, these traditional discrete metrics—particularly lexical frequency—fail to capture the true underlying physics of knowledge evolution due to a phenomenon known as \textbf{Semantic Shift}.
+
+Language is non-stationary. The semantic weight of a term changes as the discipline evolves around it. Consider the term ``quantum physics.'' In the 1930s, this term predominantly described the wave mechanics of electrons and atomic spectra. By the 1970s, the center of mass for ``quantum'' had shifted toward Quantum Field Theory and the Standard Model of particle physics. Today, a search for ``quantum'' in the arXiv database is overwhelmingly dominated by quantum information theory, cryptography, and quantum computation.
+
+This modern shift is not merely academic; it is driven by massive influxes of capital from technological conglomerates and military-industrial complexes seeking cryptographic supremacy. The \textit{word} string ``q-u-a-n-t-u-m'' has remained invariant, but the underlying \textit{concept} has drifted across the academic landscape, co-opting terms from computer science and engineering.
+
+If we rely purely on Boolean keyword searches or static ontological graphs, we are blind to this movement. Counting the word ``quantum'' in 1950 and 2024 is equivalent to measuring the coordinates of two completely different physical objects.
+
+To rigorously quantify how scientific focus morphs over time, we must abandon discrete keyword counting. We need a continuous mathematical framework that can measure the ``distance'' between concepts as they evolve. We must map the lexicon into a measurable topological space.
 
 \input{introduction/sec1_drift}
 \input{introduction/sec2_medium}
