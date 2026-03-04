@@ -27,3 +27,6 @@ class DocumentRepository(Protocol):
     def search_by_embedding(self, query_embedding: list[float], limit: int = 5) -> list[tuple[DocumentMetadata, float]]:
         ...
 
+# change name to find_similar
+# do we need it to return a list with distances ?
+

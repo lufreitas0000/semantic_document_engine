@@ -14,3 +14,4 @@ class AcademicGraphPort(Protocol):
         self, query: str, limit: int = 5
     ) -> AsyncGenerator[DocumentMetadata, None]:
         ...
+# change name to : fetch_documents

@@ -11,3 +11,4 @@ class TextEmbeddingPort(Protocol):
     """
     def embed_text(self, text: str) -> list[float]:
         ...
+# change name to generate_embedding
