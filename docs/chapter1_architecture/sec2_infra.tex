@@ -68,9 +68,76 @@ Because our infrastructure strictly relies on PostgreSQL, our Repository adapter
 \end{itemize}
 
 
-
 \subsubsection*{2. Database Migrations via \texttt{Alembic}}
-% TODO: Explain Alembic's role in tracking database schema changes over time (version control for databases).
+
+While \texttt{SQLAlchemy} elegantly maps Python objects to database tables, it presents a temporal challenge. Software is not static. Over the lifecycle of the engine, the Core Domain will inevitably evolve; we might need to add a new metadata field, change a string length constraint, or attach an entirely new relational table.
+
+If a developer simply modifies the \texttt{SQLAlchemy} \texttt{DeclarativeBase} class, the Python application will immediately expect the new schema, but the physical PostgreSQL database running on the disk will still possess the old schema. This structural mismatch causes fatal runtime exceptions. Furthermore, we cannot simply drop the tables and recreate them from scratch, as this would permanently destroy millions of processed documents.
+
+To solve this, our infrastructure utilizes \textbf{\texttt{Alembic}}, a database migration tool built natively on top of \texttt{SQLAlchemy}. \texttt{Alembic} acts as a strict version control system for the physical database schema, functioning analogously to how Git tracks source code.
+
+Instead of administrators executing raw SQL mutations on the production server, \texttt{Alembic} captures schema evolution as a Directed Acyclic Graph of migration scripts. Each script represents a deterministic state transition containing two functions:
+\begin{itemize}
+    \item \textbf{\texttt{upgrade()}:} Applies the structural change (e.g., executing an \texttt{ALTER TABLE ADD COLUMN} command).
+    \item \textbf{\texttt{downgrade()}:} Reverts the exact change (e.g., \texttt{DROP COLUMN}), allowing the system to roll back seamlessly if a deployment fails.
+\end{itemize}
+
+Crucially, \texttt{Alembic} automates this via its \textit{autogenerate} engine. When triggered, \texttt{Alembic} inspects the \texttt{DeclarativeBase} metadata in Python RAM, connects to the live PostgreSQL database, and computes the topological difference between the two schemas. It then automatically authors the Python migration script required to synchronize the physical database with the codebase. By committing these generated scripts to our Git repository, we mathematically guarantee that any compute node pulling the code can deterministically reconstruct the exact physical database structure required to run the pipeline.
+
+
+\textbf{The Physical Architecture of Alembic} \\
+To achieve this version control, \texttt{Alembic} relies on a strict directory structure that dictates how the Python runtime interacts with the database:
+\begin{itemize}
+    \item \textbf{\texttt{alembic.ini}:} The global configuration file residing at the root of the repository. It defines the target database URL (\texttt{sqlalchemy.url}) and logging parameters.
+    \item \textbf{\texttt{migrations/env.py}:} The critical execution context. This script boots up the \texttt{SQLAlchemy} engine and imports our \texttt{DeclarativeBase} metadata. It is the physical bridge that allows \texttt{Alembic} to read the Python models in RAM and compare them against the PostgreSQL tables on disk.
+    \item \textbf{\texttt{migrations/script.py.mako}:} The template engine file. When \texttt{Alembic} autogenerates a new script, it uses this \texttt{Mako} template to structure the output file.
+    \item \textbf{\texttt{migrations/versions/}:} The directory housing the actual Directed Acyclic Graph of historical state transitions.
+\end{itemize}
+
+\textbf{Handling Custom C-Extensions (The \texttt{pgvector} Challenge)} \\
+When mapping standard types (\texttt{String}, \texttt{Integer}), \texttt{Alembic} automatically generates the correct \texttt{import sqlalchemy as sa} statements. However, when we introduce third-party C-extensions like \texttt{pgvector}, the autogenerator will blindly output a \texttt{Vector} column without importing the underlying library. If applied, the migration will crash with a \texttt{NameError}.
+
+To mathematically prove the migration is sound, we must inject the custom dependency into the environment. We modify the \texttt{script.py.mako} template to automatically prepend \texttt{import pgvector.sqlalchemy} to the top of every new migration file. Furthermore, we must ensure our \texttt{env.py} file correctly imports our \texttt{models.py} file so the \texttt{target\_metadata} is perfectly synced with our domain logic.
+
+\textbf{The Migration Lifecycle in Practice} \\
+Consider a scenario where we expand our \texttt{DocumentModel} to include a 768-dimensional tensor for machine learning embeddings. We update our Python model with \texttt{mapped\_column(Vector(768))}.
+
+We then instruct \texttt{Alembic} to calculate the topological difference and generate the script via the terminal:
+
+\begin{lstlisting}[language=bash, caption={Generating the Migration}]
+$ alembic revision --autogenerate -m "feat_add_vector_embedding_column"
+\end{lstlisting}
+
+This generates a new file in the \texttt{versions/} directory with a unique cryptographic hash (e.g., \texttt{21178132d92e\_...py}). The autogenerated script clearly defines the bidirectional state transition:
+
+\begin{lstlisting}[caption={The Deterministic State Transition (Simplified)}]
+from alembic import op
+import sqlalchemy as sa
+import pgvector.sqlalchemy # Injected custom type
+
+# Revision identifiers
+revision = '21178132d92e'
+down_revision = '51ab2670c483' # Pointer to the previous state
+
+def upgrade() -> None:
+    # Move state forward: Add the vector column
+    op.add_column(
+        'documents',
+        sa.Column('embedding', pgvector.sqlalchemy.Vector(dim=768))
+    )
+
+def downgrade() -> None:
+    # Revert state backward: Destroy the vector column
+    op.drop_column('documents', 'embedding')
+\end{lstlisting}
+
+Notice the \texttt{down\_revision} variable. This establishes the strict mathematical edges of our Directed Acyclic Graph; this script can \textit{only} be applied if the database is currently sitting at state \texttt{51ab2670c483}.
+
+Finally, to physically mutate the PostgreSQL schema, we execute the upgrade command, pushing the database to the most recent node (\texttt{head}) in the graph:
+
+\begin{lstlisting}[language=bash, caption={Applying the State Transition}]
+$ alembic upgrade head
+\end{lstlisting}
 
 \subsubsection*{3. Vector Mathematics via \texttt{pgvector}}
 % TODO: Explain the pgvector C-extension for PostgreSQL.
