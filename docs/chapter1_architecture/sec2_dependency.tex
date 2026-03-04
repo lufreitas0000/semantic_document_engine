@@ -52,6 +52,7 @@ We construct this inner ring sequentially, building its own internal Directed Ac
 
 
 
+
 \subsubsection*{1. The Domain Entity (\texttt{domain.py})}
 
 The fundamental data entity of the architecture is the academic paper. We define this using a pure data structure. While the actual repository contains extensive metadata fields (citation counts, authors, publication dates), we present a structurally simplified version here for clarity:
@@ -79,6 +80,10 @@ We further protect the system's RAM using the \texttt{Optional[list[float]] = No
 By defaulting the embedding to \texttt{None}, we utilize lazy allocation. The \texttt{None} object in Python is a global singleton; it consumes effectively zero bytes per instance. The massive arrays of floats are never allocated into Python's RAM unless a specific ML use case explicitly requests them. For the vast majority of operations, the heavy vector algebra is entirely delegated to the \texttt{pgvector} C-extension inside the database, and the Python application only ever handles the lightweight metadata.
 
 
+\textbf{The \texttt{@dataclass} Decorator} \\
+In standard Python, creating a class strictly for data storage requires writing tedious, boilerplate ``dunder'' (double underscore) methods. The \texttt{@dataclass} decorator acts as a compile-time macro. When the Python interpreter loads this module, it intercepts the class definition and automatically generates the \texttt{\_\_init\_\_()} constructor, the \texttt{\_\_repr\_\_()} string representation, and the \texttt{\_\_eq\_\_()} equality operators based purely on the type-hinted attributes. This guarantees that two \texttt{DocumentMetadata} instances with identical IDs and abstracts evaluate as mathematically equal without requiring custom logic, enforcing value-based equality.
+
+%To enforce this pure data structure without writing tedious, boilerplate ``dunder'' (double underscore) methods, we utilize the \texttt{@dataclass} decorator. It acts as a compile-time macro. When the Python interpreter loads this module, it intercepts the class definition and automatically generates the \texttt{\_\_init\_\_()} constructor, the \texttt{\_\_repr\_\_()} string representation, and the \texttt{\_\_eq\_\_()} equality operators based purely on the type-hinted attributes. This guarantees that two \texttt{DocumentMetadata} instances with identical IDs and abstracts evaluate as mathematically equal without requiring custom logic, natively enforcing value-based equality.
 
 
 
@@ -114,7 +119,7 @@ class TextEmbeddingPort(Protocol):
 \end{lstlisting}
 
 
-\textbf{Pedagogical Note: Python OOP and Structural Subtyping} \\
+\textbf{Python OOP and Structural Subtyping} \\
 For researchers transitioning from imperative scripting to Object-Oriented Programming (OOP), the syntax above warrants a strict breakdown:
 \begin{itemize}
     \item \textbf{\texttt{Protocol}:} By inheriting from \texttt{typing.Protocol}, we declare that these classes are \textit{not} meant to be executed. They contain no logic (denoted by the \texttt{...} ellipsis). They act purely as structural blueprints. Any external adapter that implements a \texttt{fetch\_document} method with the exact same inputs and outputs is automatically recognized as valid by Python's type checker (a concept known as structural subtyping, or ``duck typing'').
