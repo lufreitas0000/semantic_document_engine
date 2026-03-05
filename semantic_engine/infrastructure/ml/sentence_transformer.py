@@ -11,6 +11,8 @@ from semantic_engine.core_interfaces.ml import TextEmbeddingPort
         # .encode() passes the text through the neural network and returns a numpy array
         # Convert the numpy array back to standard Python floats for our Domain Protocol
 
+
+#refactor it for structural subtyping (duck type - not inheritance)
 class HuggingFaceEmbeddingModel(TextEmbeddingPort):
     def __init__(self, model_name: str = "all-MiniLM-L6-v2", device: Optional[str] = None):
         self.device: str
@@ -25,6 +27,7 @@ class HuggingFaceEmbeddingModel(TextEmbeddingPort):
         # 2. Load model into RAM or VRAM
         self.model = SentenceTransformer(model_name, device=self.device)
 
+# change name to generate_embedding
     def embed_text(self, text: str) -> list[float]:
         # The model automatically executes the math on the target device
         embedding = self.model.encode(text)
