@@ -21,15 +21,15 @@ To illustrate this, consider how our system fetches a vector. Instead of the Cor
 \begin{lstlisting}[caption={Dependency Inversion using Python Protocols}]
 from typing import Protocol
 
-# 1. THE PORT (Core Domain)
+1. THE PORT (Core Domain)
 class DocumentRepository(Protocol):
     def get_vector(self, doc_id: str) -> list[float]:
         ...
 
-# 2. THE ADAPTER (Infra Layer)
+2. THE ADAPTER (Infra Layer)
 class PgVectorRepository:
     def get_vector(self, doc_id: str) -> list[float]:
-        # SQL logic and network calls happen here ...
+        SQL logic and network calls happen here ...
         return [0.1, 0.2, 0.3]
 \end{lstlisting}
 
