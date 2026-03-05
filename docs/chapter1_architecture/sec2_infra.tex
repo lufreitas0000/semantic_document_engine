@@ -596,7 +596,7 @@ class ArxivClient:
         root = ET.fromstring(response.text)
 
         # ... (XML Tree Traversal logic omitted for clarity) ...
-        # Assume we extracted `title' and `abstract' from the AST
+        # Assume we extracted "title" and "abstract" from the AST
 
         # 3. Yield the pure Domain Entity
         yield DocumentMetadata(
