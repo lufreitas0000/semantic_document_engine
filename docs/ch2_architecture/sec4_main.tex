@@ -1,0 +1,23 @@
+\section{System Workflow and Component Roles}
+
+The \texttt{main.py} module serves as the outermost boundary of the Semantic Document Engine. It acts as the primary entry point for all external HTTP traffic. Rather than computing the mathematical domain logic directly, its sole responsibility is to route incoming data, manage asynchronous execution, and inject the necessary infrastructure adapters into the pure Core Domain.
+
+We can decompose the workflow of this presentation layer into four distinct operational components:
+
+\subsection*{1. The Asynchronous Router (FastAPI)}
+FastAPI manages the incoming TCP connections from external clients. It operates on a single thread utilizing Python's \texttt{asyncio} event loop. The strict architectural rule for this layer is that it must never perform blocking operations. If the router executes a heavy CPU-bound matrix multiplication or waits synchronously for a network response, the entire event loop freezes, and the server cannot accept new connections. Instead, FastAPI's role is to parse the incoming HTTP request, validate the data types, and immediately delegate the actual processing to other specialized components, maintaining high throughput for concurrent users.
+
+\subsection*{2. Deferred Execution (Celery)}
+Operations that require significant computational time or suffer from high network latency must be removed from the main event loop. For instance, fetching large XML payloads from the arXiv API and computing Transformer-based vector embeddings for entire documents would critically block the router.
+
+To solve this, the router pushes these intensive jobs to a distributed message queue (managed by Redis). A separate framework, Celery, acts as the deferred execution engine. Celery spawns a pool of independent worker processes at the OS level. By shifting the workload out of the FastAPI thread and into these isolated background processes, we completely bypass the Python Global Interpreter Lock (GIL). This allows the system to execute heavy network I/O and GPU tensor allocations in true parallel across multiple CPU cores without interrupting the web server.
+
+\subsection*{3. Transaction Boundaries (The Unit of Work)}
+When a web endpoint (such as \texttt{/search/} or \texttt{/documents/}) requires interaction with the persistent database, it does not open a connection directly. Instead, it relies on the \texttt{SqlAlchemyUnitOfWork} (UoW).
+
+The FastAPI dependency injection system instantiates a UoW and passes it into the execution context. The UoW acts as a strict state boundary. It guarantees that all subsequent database queries or vector searches occur within an isolated, ACID-compliant transaction block. If a runtime exception occurs during the computation in the Python heap, the UoW intercepts the error and guarantees a deterministic mathematical rollback of the database, ensuring no partial or corrupted states are ever committed to disk.
+
+\subsection*{4. Real-Time Tensor Projection (The ML Adapter)}
+While bulk document embedding is safely deferred to the Celery workers, the system must still process user search queries instantaneously.
+
+To achieve this, a localized instance of the Transformer model (the \texttt{HuggingFaceEmbeddingModel}) is initialized directly within the FastAPI application's memory space. When a user submits a short 5-word search string, this local ML Adapter instantly projects the raw text into the 768-dimensional vector space. This single query vector is then passed through the Unit of Work down to the PostgreSQL database, where the \texttt{pgvector} C-extension executes the hardware-accelerated similarity search.

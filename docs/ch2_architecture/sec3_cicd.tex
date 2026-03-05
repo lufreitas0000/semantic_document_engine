@@ -1,0 +1,30 @@
+\section{Continuous Verification and State Isolation}
+
+In a mathematically rigorous system, the correctness of the code cannot rely on human discipline; it must be enforced by the physical infrastructure. We treat the evolution of the codebase itself as a deterministic state machine. To prevent software entropy and guarantee our architectural invariants (such as the Hexagonal boundary), we strictly adopt Test-Driven Development (TDD) coupled with automated Continuous Integration (CI).
+
+\subsection*{Test-Driven Development (TDD) as Formal Verification}
+In standard software engineering, testing is often treated as a post-hoc Quality Assurance (QA) step. In our architecture, testing is the formal definition of the algebraic contract.
+
+TDD mandates that before a single line of functional Python is written, we must first write the test. Mathematically, this is equivalent to defining the domain and expected codomain of a mapping before implementing the mapping logic. By asserting the expected \texttt{PyObject} memory state or the required database row count beforehand, we rigidly bound the state space of the module.
+
+This continuous verification prevents regressions. When we modify a pure function in the Core Domain, the unit tests execute entirely within the local CPU L1/L2 caches and RAM, taking milliseconds. If the execution path violates an invariant, the test fails, immediately halting the state transition of the codebase.
+
+\subsection*{The Git DAG and GitHub Flow}
+To manage concurrent development, we utilize Git. Fundamentally, Git is a Directed Acyclic Graph (DAG) constructed from Merkle trees. Each commit is a cryptographically hashed snapshot of the repository's file system structure.
+
+We adhere strictly to \textbf{GitHub Flow}:
+\begin{enumerate}
+    \item \textbf{Feature Branches:} The \texttt{main} branch represents the immutable, production-ready state of the system. To implement a new feature, we branch off \texttt{main}. This isolates our modifications in a divergent topological path, allowing us to safely mutate state without affecting the stable baseline.
+    \item \textbf{Atomic Commits:} Each commit must represent a single, discrete logical change (e.g., adding a specific Port or implementing a single Adapter). This reduces cyclomatic complexity during code review and makes mathematical rollbacks trivial via \texttt{git revert}.
+    \item \textbf{Pull Requests (PRs) as Transaction Boundaries:} Once the feature is complete, we open a PR. The PR acts as a proposed merge edge in the DAG, attempting to reintegrate the divergent branch back into \texttt{main}.
+\end{enumerate}
+
+\subsection*{Continuous Integration (CI) Automation}
+A Pull Request cannot be merged by human decree alone. Opening a PR triggers our Continuous Integration (CI) pipeline via GitHub Actions.
+
+The CI server acts as an automated hypervisor. It provisions an ephemeral, isolated Linux container (utilizing kernel \texttt{namespaces} and \texttt{cgroups}). Within this pristine environment, it allocates a fresh Python process heap and executes our verification matrix:
+\begin{itemize}
+    \item \textbf{Static Analysis (\texttt{mypy}):} Parses the Abstract Syntax Tree (AST) to verify structural subtyping and pure functional contracts without executing bytecode.
+    \item \textbf{Dynamic Analysis (\texttt{pytest}):} Executes the TDD suite, asserting that the runtime memory transformations behave exactly as formally specified.
+\end{itemize}
+Only when this automated environment returns a deterministic \texttt{exit 0} (success) is the PR unlocked, allowing the merge commit to atomically update the \texttt{main} branch.
