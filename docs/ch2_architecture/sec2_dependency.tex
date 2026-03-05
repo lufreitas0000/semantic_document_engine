@@ -40,21 +40,19 @@ To maintain the acyclic nature of the system, we establish strict, non-negotiabl
 The following subsections will decompose each of these physical boundaries, detailing the exact files, classes, and responsibilities housed within them.
 
 
-\subsection{The Inner Ring: \texttt{core\_interfaces/}}
+\textbf{The Inner Ring: \texttt{core\_interfaces/}}
 
 The \texttt{core\_interfaces} directory is the absolute center of our system. It is computationally blind to the outside world; it contains zero external dependencies and imports only from the Python standard library. Here, we define the pure data structures (Entities) and the abstract contracts (Ports) that govern the physics of our pipeline.
 
 We construct this inner ring sequentially, building its own internal Directed Acyclic Graph. We must define the core entity before we can define the interfaces that manipulate it.
 
-\input{chapter1_architecture/sec2_core_interfaces}
 
 
-\subsection{The Outer Ring: \texttt{infrastructure/}}
+\textbf{The Outer Ring: \texttt{infrastructure/}}
 
-\input{chapter1_architecture/sec2_infra.tex}
 
-\subsection{The Execution Locus: \texttt{app\_*/} (Use Cases)}
+\textbf{The Execution Locus: \texttt{app\_*/} (Use Cases)}
 % TODO: Detail how workflows orchestrate the interfaces and adapters.
 
-\subsection{The Verification Boundary: \texttt{tests/}}
+\textbf{The Verification Boundary: \texttt{tests/}}
 % TODO: Detail how pytest relies on the Dependency Inversion Principle to mock the infrastructure.
