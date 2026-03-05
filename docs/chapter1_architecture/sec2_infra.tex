@@ -214,26 +214,708 @@ that is dynamically injected into the interpreter at runtime. The static analyze
 % TODO: Explain why we use `# type: ignore` in Python when dealing with dynamically injected C-extensions.
 
 \subsubsection*{4. Cryptographic Identity via \texttt{UUID}}
-% TODO: Explain the difference between the `uuid` module and `uuid4`. Why pure randomness (v4) is critical for distributed systems to avoid primary key collisions without locking the database.
+
+Traditional relational databases typically identify rows using auto-incrementing sequential integers (e.g., $1, 2, 3\dots$). While mathematically simple, this approach creates a severe architectural bottleneck in a distributed application.
+
+If we have 50 parallel \texttt{Celery} workers attempting to ingest academic papers simultaneously, they cannot natively assign an ID to a \texttt{DocumentMetadata} object in their local Python RAM. To avoid a collision, a worker must pause its execution, open a network connection to PostgreSQL, lock the primary key sequence table, ask the database for the ``next'' integer, wait for the response, and then unlock the sequence. This highly synchronous operation forces all 50 parallel workers into a single-file line, completely destroying the performance benefits of asynchronous processing.
+
+To permanently decouple identity generation from the database, our architecture utilizes \textbf{Universally Unique Identifiers (UUIDs)}. A UUID is a standardized 128-bit label.
+
+In Python, we import the built-in \texttt{uuid} module. However, it is critical to distinguish the module itself from the specific generation algorithm we invoke: \texttt{uuid.uuid4()}.
+\begin{itemize}
+    \item \textbf{Version 1 (\texttt{uuid1}):} Generates IDs using the host computer's MAC address and the current system timestamp. In a distributed cloud environment, this exposes physical hardware addresses (a security risk) and requires strict clock synchronization across all nodes to prevent ID collisions.
+    \item \textbf{Version 4 (\texttt{uuid4}):} Generates IDs using pure Cryptographically Secure Pseudorandom Number Generators (CSPRNG), completely ignoring time and hardware.
+\end{itemize}
+
+By using Version 4, we rely entirely on the mathematics of probability. The generation space contains $2^{122}$ possible variations (as 6 bits are mathematically reserved for versioning data). The probability of two parallel workers randomly generating the exact same ID is so infinitesimally small that it is considered practically impossible.
+
+\begin{lstlisting}[caption={Lock-Free Primary Key Generation}]
+import uuid
+from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+
+class DocumentModel(Base):
+    __tablename__ = "documents"
+
+    # Generate the ID in Python RAM before it ever hits the database
+    id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4
+    )
+\end{lstlisting}
+
+
+
+\textbf{Deconstructing the Model Configuration} \\
+To bridge the gap between Python's probability generation and PostgreSQL's storage engine, we construct the column using a highly specific set of parameters:
+\begin{itemize}
+    \item \textbf{\texttt{Mapped[uuid.UUID]}:} This satisfies Python's static type checker (\texttt{mypy}), mathematically proving that any interaction with \texttt{document.id} will yield a native Python \texttt{UUID} object, not a string.
+    \item \textbf{\texttt{mapped\_column(...)}:} This instructs \texttt{SQLAlchemy} on how to physically construct the database schema.
+    \item \textbf{\texttt{PG\_UUID(as\_uuid=True)}:} As discussed in the Dialects section, \texttt{PG\_UUID} forces PostgreSQL to use its optimized 128-bit binary storage rather than a \texttt{VARCHAR}. The \texttt{as\_uuid=True} parameter instructs the \texttt{psycopg} network driver to automatically deserialize those incoming binary bytes back into a native Python \texttt{UUID} object when reading from the database.
+    \item \textbf{\texttt{primary\_key=True}:} Instructs PostgreSQL to build a unique B-Tree index over this column, guaranteeing no duplicates can ever physically exist on the disk.
+    \item \textbf{\texttt{default=uuid.uuid4}:} Notice that we pass the function reference (\texttt{uuid.uuid4}), \textit{not} the executed function (\texttt{uuid.uuid4()}). If we added parentheses, the ID would be generated exactly once when the module loads, and every single document would receive the exact same ID. By passing the reference, we instruct \texttt{SQLAlchemy} to execute this function dynamically upon every new instantiation.
+\end{itemize}
+
+\textbf{The Runtime Execution Sequence} \\
+This configuration fundamentally alters the traditional database timeline. When a distributed \texttt{Celery} worker processes a new paper, it instantiates the Python object: \texttt{doc = DocumentModel(title="Quantum...")}.
+
+At that exact millisecond, before any network connection is opened, the \texttt{SQLAlchemy} ORM intercepts the instantiation, invokes the \texttt{uuid4} function locally, and assigns the unique cryptographic string to the object in the worker's RAM. The worker can immediately use this ID to name related files on the hard drive or pass it to other systems.
+
+Eventually, when the Unit of Work issues a \texttt{commit()}, the ORM packages this pre-computed ID into an \texttt{INSERT} statement and transmits it over TCP to PostgreSQL. The database never calculates anything; it simply verifies the B-Tree index and writes the bytes. This lock-free architecture empowers an infinite number of worker nodes to ingest data concurrently without ever waiting for the database to assign an integer.
+
+This structural decision is profound. It empowers every isolated worker node to instantiate a pure \texttt{DocumentMetadata} entity, instantly assign it a guaranteed-unique \texttt{uuid4} primary key in its local RAM, and asynchronously push the data to the database whenever the network allows. The PostgreSQL server never has to calculate or lock a sequence; it simply accepts and stores the incoming cryptographically unique byte arrays.
+
+
+
+
+
+
 
 % =====================================================================
 % The Concrete Adapters
 % =====================================================================
 
 \subsubsection*{5. The Database Models (\texttt{database/models.py})}
-% TODO: Map the pure Domain Entity to SQLAlchemy Declarative Base.
+
+To begin writing our concrete database adapters, we must return to the architectural philosophy of Ports and Adapters (Hexagonal Architecture).
+
+In Section 1.2, we defined the \texttt{DocumentMetadata} class within the Core Domain. It was a pure mathematical construction (\texttt{@dataclass}), entirely unaware of how it would be stored. A common mistake in traditional MVC (Model-View-Controller) frameworks like Django is to combine the domain logic and the database schema into a single class. If we added \texttt{SQLAlchemy} constraints directly to our pure \texttt{DocumentMetadata} entity, we would tightly couple the mathematical core of the engine to the PostgreSQL drivers, violating the Dependency Inversion Principle.
+
+Instead, we maintain strict isolation by creating a secondary, physical representation of the document inside the \texttt{infrastructure/} layer. This SQLAlchemy model acts purely as a \textbf{Data Transfer Object (DTO)}. It contains zero business logic; its exclusive purpose is to map the physical layout of the PostgreSQL disk into Python RAM so that data can eventually be mapped back into our pure \texttt{DocumentMetadata} entity.
+
+Following the pedagogical simplification we used in the Core Domain, here is the exact code required to define the structural boundaries of our primary table:
+
+\begin{lstlisting}[caption={The Concrete SQLAlchemy Adapter (\texttt{models.py})}]
+from typing import Optional
+import uuid
+
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy import String, Text
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from pgvector.sqlalchemy import Vector  # type: ignore
+
+class Base(DeclarativeBase):
+    pass
+
+class DocumentModel(Base):
+    __tablename__ = "documents"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    title: Mapped[str] = mapped_column(String(500))
+    abstract: Mapped[str] = mapped_column(Text)
+
+    embedding: Mapped[Optional[list[float]]] = mapped_column(
+        Vector(768), nullable=True
+    )
+\end{lstlisting}
+
+This code synthesizes all the infrastructure theory we have established:
+\begin{itemize}
+    \item We inherit from \texttt{Base} to register the \texttt{documents} table in memory.
+    \item We define the lock-free cryptographic identity using \texttt{PG\_UUID} and the dynamic \texttt{uuid.uuid4} callable.
+    \item We bound the physical RAM layout using standard relational types (\texttt{String(500)} and unbounded \texttt{Text}).
+    \item We utilize the \texttt{pgvector} C-extension to map the dense mathematical tensor (\texttt{Vector(768)}), safely bypassing the static type checker, and allowing lazy initialization via \texttt{nullable=True}.
+\end{itemize}
+
+With the physical structure of the table perfectly mapped in Python, we can now implement the active methods to insert and query these rows using the Repository Pattern.
+
+
+
+
+
+
 
 \subsubsection*{6. The Repository Adapter (\texttt{database/repository.py})}
-% TODO: Implement the DocumentRepository Port using the SQLAlchemy ORM.
+
+With our physical database schema defined via the \texttt{DocumentRecord} model, we can now implement the \texttt{DocumentRepository} Protocol that we originally declared in the Core Domain (\texttt{core\_interfaces/repository.py}).
+
+To understand this adapter, we must recall the strict architectural distinction between our two data structures:
+\begin{itemize}
+    \item \textbf{\texttt{DocumentMetadata}:} The pure, mathematical Domain Entity. It exists entirely in Python RAM and is the only object the Core Domain is allowed to touch.
+    \item \textbf{\texttt{DocumentRecord}:} The SQLAlchemy Data Transfer Object (DTO). It is a physical mapping of the PostgreSQL disk.
+\end{itemize}
+
+The primary job of the \texttt{SqlAlchemyDocumentRepository} is to act as the boundary translator between these two states. It accepts a pure \texttt{DocumentMetadata} object, translates it into a \texttt{DocumentRecord} to interact with the database, and conversely translates raw database rows back into pure Domain Entities before returning them to the application.
+
+Furthermore, this class utilizes the core \texttt{SQLAlchemy} mechanics we established earlier:
+\begin{itemize}
+    \item \textbf{\texttt{Session}:} Passed into the repository upon instantiation, it acts as the memory workspace handling the TCP connection to PostgreSQL.
+    \item \textbf{\texttt{select}:} The composable function used to construct secure, object-oriented SQL queries.
+    \item \textbf{\texttt{stmt}:} A standard variable naming convention representing the Abstract Syntax Tree of the SQL statement before it is executed.
+\end{itemize}
+
+\textbf{Basic CRUD and Boundary Translation} \\
+In database engineering, \textbf{CRUD} is an acronym representing the four foundational operations of persistent storage: \textbf{C}reate, \textbf{R}ead, \textbf{U}pdate, and \textbf{D}elete. Our \texttt{DocumentRepository} Protocol currently dictates the two most critical of these operations: Create (\texttt{add}) and Read (\texttt{get}).
+
+To execute these operations, the adapter relies entirely on the \texttt{SQLAlchemy} \texttt{Session}.
+\begin{itemize}
+    \item \textbf{During a Create (\texttt{add}):} The session acts as a localized memory staging area. Calling \texttt{session.add(record)} does not instantly write to the hard drive; it simply registers the new object in RAM, tracking its state until the Unit of Work orchestrates the final network flush.
+    \item \textbf{During a Read (\texttt{get}):} The session acts as a query execution engine and an identity map. It transmits the SQL \texttt{SELECT} statement over the network, receives the raw binary rows, and mathematically materializes them into Python objects.
+\end{itemize}
+
+However, before the Session can process any data, that data must cross the architectural boundary. This requires \textbf{Boundary Translation}. The Core Domain only speaks the language of pure \texttt{DocumentMetadata} entities. The database only speaks the language of \texttt{DocumentRecord} DTOs. Therefore, the repository must act as a customs agent: unpacking the raw attributes from the incoming Domain Entity and repacking them into a SQLAlchemy DTO (and vice versa for outgoing data).
+
+We implement this translation via two private helper methods. In Python, prefixing a method with an underscore (\texttt{\_to\_model} and \texttt{\_to\_domain}) is a strict convention denoting that the method is entirely internal. By hiding these translators, we mathematically guarantee that the core application can never accidentally bypass the boundary and touch a raw, volatile SQLAlchemy object.
+
+We begin by defining the repository class, injecting the \texttt{Session}, and establishing these hidden translators:
+
+\begin{lstlisting}[caption={The Repository Adapter: Translation and Basic CRUD}]
+from uuid import UUID
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+from core_interfaces.domain import DocumentMetadata
+from infrastructure.database.models import DocumentRecord
+
+class SqlAlchemyDocumentRepository:
+    def __init__(self, session: Session):
+        self.session = session
+
+    # --- Hidden Boundary Translators ---
+    def _to_model(self, doc: DocumentMetadata) -> DocumentRecord:
+        return DocumentRecord(
+            id=doc.id,
+            title=doc.title,
+            embedding=doc.embedding
+        )
+
+    def _to_domain(self, record: DocumentRecord) -> DocumentMetadata:
+        return DocumentMetadata(
+            id=record.id,
+            title=record.title,
+            embedding=record.embedding
+        )
+
+    # --- Protocol Implementations ---
+    def add(self, document: DocumentMetadata) -> None:
+        record = self._to_model(document)
+        self.session.add(record)
+
+    def get(self, document_id: UUID) -> DocumentMetadata | None:
+        stmt = (
+            select(DocumentRecord)
+            .where(DocumentRecord.id == document_id)
+        )
+        record = self.session.scalars(stmt).first()
+        if record:
+            return self._to_domain(record)
+        return None
+\end{lstlisting}
+
+Notice the architectural purity here. When \texttt{add()} is called, the repository translates the mathematical entity into the DTO and stages it inside the \texttt{Session}. When \texttt{get()} is called, it constructs a \texttt{stmt}, fetches the DTO from the database, and immediately translates it back via \texttt{\_to\_domain()}. The Core Domain calling these methods never sees the \texttt{DocumentRecord}.
+
+\textbf{Executing the Vector Search (K-Nearest Neighbors)} \\
+Finally, we must implement the mathematical heart of the engine: the \texttt{find\_similar} method. In machine learning, this operation is formally known as a \textbf{K-Nearest Neighbors (KNN)} search. The concept is straightforward: given a specific target point in a high-dimensional space (the user's query vector), we want to find the $K$ specific points (documents) that are geometrically closest to it.
+
+To achieve this without crashing the server's RAM, we construct a query that pushes the entire KNN calculation down to the CPU SIMD instructions via the \texttt{pgvector} extension:
+
+\begin{lstlisting}[caption={The Repository Adapter: Vector Search Implementation}]
+    def find_similar(
+        self, query_vector: list[float], limit: int = 10
+    ) -> list[DocumentMetadata]:
+        stmt = (
+            select(DocumentRecord)
+            .where(DocumentRecord.embedding.is_not(None))
+            .order_by(
+                DocumentRecord.embedding.cosine_distance(query_vector)
+            )
+            .limit(limit)
+        )
+
+        records = self.session.scalars(stmt).all()
+
+        return [self._to_domain(record) for record in records]
+\end{lstlisting}
+
+Let us deconstruct this query execution line by line:
+\begin{itemize}
+    \item \textbf{\texttt{.where(...is\_not(None))}:} Before performing any mathematics, we filter out documents that have not yet been processed by the ML embedding model. Attempting to calculate the cosine distance against a \texttt{None} pointer would immediately crash the database query.
+    \item \textbf{\texttt{.order\_by(...cosine\_distance)}:} This is the core hardware trigger. It instructs PostgreSQL to calculate the geometric angle between the \texttt{query\_vector} and every valid embedding in the table, and then sort the database rows starting from the narrowest angle (most similar) to the widest.
+    \item \textbf{\texttt{.limit(limit)}:} This represents the ``$K$'' in our KNN search. It truncates the sorted list at exactly the requested limit (e.g., 10 results), ensuring we only return a lightweight data payload over the TCP network.
+    \item \textbf{\texttt{session.scalars().all()}:} This transmits the finalized SQL statement to PostgreSQL, executes the mathematics on the disk, and materializes the top winning \texttt{DocumentRecord} DTOs back into Python RAM.
+    \item \textbf{\texttt{[self.\_to\_domain(...)]}:} Finally, we execute our boundary translation using a Python list comprehension. We convert the raw SQLAlchemy DTOs back into pure mathematical \texttt{DocumentMetadata} entities before handing them safely back to the Core Domain.
+\end{itemize}
+
+Let us pause and recognize the sheer scale of the computation happening within that \texttt{order\_by} clause. If our database contains 1 million processed academic papers, this single line of Python code mathematically forces the PostgreSQL server to compute 1 million individual 768-dimensional dot products. As established in the Infrastructure theory, this massive workload is executed entirely on the database server's CPU using SIMD hardware acceleration. The Python interpreter never sees those 1 million vectors; it only receives the final 10 winning IDs over the network.
+
+This execution perfectly fulfills the \texttt{DocumentRepository} Protocol contract. We have successfully abstracted away the immense complexity of TCP routing, database connection pooling, raw SQL string manipulation, and C-extension tensor mathematics. To the Core Domain calling this adapter, the entire operation is indistinguishable from querying a simple, in-memory Python list. The boundary is secure, and the mathematical purity of the engine is preserved.
+
+
+
+
+
+
 
 \subsubsection*{7. The Unit of Work Adapter (\texttt{database/uow.py})}
-% TODO: Implement the AbstractUnitOfWork Port using SQLAlchemy sessionmaker and actual commits/rollbacks.
+
+With the Repository adapter complete, we must now implement the \texttt{AbstractUnitOfWork} Protocol to orchestrate the transaction boundaries.
+
+\begin{lstlisting}[caption={The Unit of Work Adapter (\texttt{uow.py})}]
+from typing import Self
+from sqlalchemy.orm import sessionmaker
+
+from core_interfaces.repository import DocumentRepository
+from infrastructure.database.repository import (
+    SqlAlchemyDocumentRepository,
+)
+
+class SqlAlchemyUnitOfWork:
+    def __init__(self, session_factory: sessionmaker):
+        self.session_factory = session_factory
+
+    def __enter__(self) -> Self:
+        self.session = self.session_factory()
+
+        # Parentheses allow clean PEP-8 line breaks
+        self.doc_repo: DocumentRepository = (
+            SqlAlchemyDocumentRepository(self.session)
+        )
+
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        if exc_type is not None:
+            self.rollback()
+        self.session.close()
+
+    def commit(self) -> None:
+        self.session.commit()
+
+    def rollback(self) -> None:
+        self.session.rollback()
+\end{lstlisting}
+
+% \textbf{Initialization (\texttt{\_\_init\_\_}) vs. Execution (\texttt{\_\_enter\_\_})} \\
+% This factory pattern explains the fundamental difference between the class constructor and the context manager.
+% When the overall application starts, we instantiate the UoW (\texttt{uow = SqlAlchemyUnitOfWork(session\_factory)}). The \texttt{\_\_init\_\_} method merely stores the factory as a class attribute. Zero network activity occurs.
+
+% Later, when a specific request triggers the context manager (\texttt{with uow as u:}), the \texttt{\_\_enter\_\_} method fires. Here, the system executes \texttt{self.session\_factory()}. This function call reaches into the \texttt{SQLAlchemy} engine, checks out an active TCP socket, and creates the \texttt{Session}. It then injects this active session into a newly minted \texttt{SqlAlchemyDocumentRepository} and binds it to the \textbf{\texttt{doc\_repo}} attribute.
+
+% \textbf{The Low-Level Methods} \\
+% Finally, the UoW exposes explicit transaction boundaries mapped directly to \texttt{SQLAlchemy}'s core methods:
+% \begin{itemize}
+%     \item \textbf{\texttt{commit()}:} This calls \texttt{self.session.commit()}. At the lowest level, this takes the Abstract Syntax Tree (AST) of all accumulated \texttt{add()} and \texttt{get()} operations, compiles them into raw SQL strings, transmits them over the TCP socket, and waits for PostgreSQL to confirm the Write-Ahead Log (WAL) has synced to the hard drive.
+%     \item \textbf{\texttt{rollback()}:} This calls \texttt{self.session.rollback()}. It sends a strict \texttt{ABORT} signal over the socket, instructing PostgreSQL to destroy the isolated MVCC snapshot and discard all pending changes.
+%     \item \textbf{\texttt{close()}:} Triggered automatically by \texttt{\_\_exit\_\_}. This calls \texttt{self.\allowbreak{}session.close()}, which wipes the local Python RAM workspace and safely returns the TCP socket back to the Connection Pool so another asynchronous worker can use it.
+% \end{itemize}
+
+\textbf{TCP Sockets and Connection Pooling} \\
+To understand this adapter, we must first define what a database ``connection'' actually is. It is not merely a software variable; it is a physical \textbf{TCP (Transmission Control Protocol) network socket}. Establishing a new TCP socket requires a three-way network handshake across the server's motherboard or the internet, followed by cryptographic authentication by PostgreSQL.
+
+If a distributed application opens and destroys a brand new TCP socket for every single incoming web request, the sheer network latency and authentication overhead will immediately overwhelm the server. To solve this, \texttt{SQLAlchemy} utilizes a \textbf{Connection Pool}. When the application boots, an \texttt{Engine} object pre-opens a batch of TCP sockets (e.g., 20 sockets) and holds them permanently open and idle in memory.
+
+\textbf{First-Class Callables and the Factory Pattern} \\
+This brings us to the class constructor (\texttt{\_\_init\_\_}) and the \texttt{sessionmaker}. In computer science, Python treats functions and classes as \textbf{First-Class Citizens}. This means a callable function can be passed around as a variable without actually executing it.
+
+We pass the \texttt{sessionmaker} into the Unit of Work as a \textbf{Factory Pattern}. A Factory is an object whose sole purpose is to manufacture other objects. The \texttt{sessionmaker} holds the configuration rules for the Connection Pool, but it holds no data itself.
+
+When the application starts, we instantiate the UoW (\texttt{uow=SqlAlchemy\allowbreak{}UnitOfWork(session\_factory)}). Zero network activity occurs; we simply store the unexecuted factory callable. Later, when a specific request triggers the context manager (\texttt{with uow as u:}), the \texttt{\_\_enter\_\_} method fires and we finally execute the callable: \texttt{self.session\_factory()}. This reaches into the Engine, checks out one of the pre-opened TCP sockets, and manufactures the temporary \texttt{Session} workspace.
+
+\textbf{Wiring the Infrastructure (FastAPI Preview)} \\
+To visualize how this adapter integrates into the overarching system, consider the application's main entry point (which we will build fully in Chapter 3). We initialize the global \texttt{Engine} and \texttt{Factory}, and then use dependency injection to hand the UoW to our web routes:
+
+\begin{lstlisting}[caption={Wiring the Infrastructure in FastAPI}]
+from fastapi import FastAPI
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from contextlib import asynccontextmanager
+
+# 1. Create the Global Connection Pool
+engine = create_engine(DATABASE_URL)
+
+# 2. Create the Session Factory bound to that pool
+SessionFactory = sessionmaker(bind=engine)
+
+# 3. Define the Application Lifespan
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Ensure all tables defined in Base exist on the disk
+    Base.metadata.create_all(engine)
+    yield
+    # (Cleanup logic would go here on shutdown)
+
+app = FastAPI(title="Semantic Document Engine", lifespan=lifespan)
+
+# 4. The Dependency Injection Provider
+def get_uow():
+    return SqlAlchemyUnitOfWork(SessionFactory)
+\end{lstlisting}
+
+Every time a user makes an HTTP request, FastAPI calls \texttt{get\_uow()}, handing a fresh Unit of Work to the Core Domain, completely abstracting the complex \texttt{SQLAlchemy} infrastructure.
+
+\textbf{The Low-Level Execution Mechanics} \\
+Finally, when the Domain finishes its work, the UoW exposes explicit transaction boundaries mapped directly to \texttt{SQLAlchemy}'s core methods:
+\begin{itemize}
+    \item \textbf{\texttt{commit()}:} This calls \texttt{self.session.commit()}. It compiles the Abstract Syntax Tree (AST) of all accumulated operations into raw SQL strings, transmits them over the TCP socket, and waits for PostgreSQL to confirm the Write-Ahead Log (WAL) has physically synced to the hard drive.
+    \item \textbf{\texttt{rollback()}:} This calls \texttt{self.session.rollback()}. It sends a strict \texttt{ABORT} signal over the socket, instructing PostgreSQL to destroy the isolated MVCC snapshot and discard all pending changes.
+    \item \textbf{\texttt{close()}:} Triggered automatically by \texttt{\_\_exit\_\_}. This wipes the local Python RAM workspace and safely returns the TCP socket back to the global Connection Pool so another concurrent user can use it.
+\end{itemize}
+
+
+
 
 \subsubsection*{8. The API Adapter (\texttt{api/arxiv.py})}
-% TODO: Implement the AcademicGraphPort using HTTP requests and XML parsing to fetch arXiv papers.
+
+With our persistent storage layer fully mapped, we turn to the network ingestion layer. Our application must fetch raw scientific literature from the external world. In the Core Domain, we defined the \texttt{AcademicGraphPort} Protocol to mandate a \texttt{fetch\_papers\_by\_query} method. We will now implement this contract by building a concrete adapter for the arXiv public API.
+
+Because network requests are inherently slow (subject to internet latency and external server response times), we cannot use standard synchronous libraries like \texttt{requests}. If a worker node blocks the CPU while waiting for arXiv to respond, our entire distributed pipeline halts. Instead, we use \textbf{\texttt{httpx}}, a fully asynchronous HTTP client.
+
+Let us examine the skeletal structure of this adapter, temporarily abstracting away the complex XML parsing:
+
+\begin{lstlisting}[caption={The arXiv API Adapter (Simplified)}]
+import uuid
+import httpx
+import xml.etree.ElementTree as ET
+from typing import AsyncGenerator
+
+from core_interfaces.domain import DocumentMetadata
+from core_interfaces.api import AcademicGraphPort
+
+class ArxivClient:
+    """Fetches and parses Atom XML from the arXiv export API."""
+
+    async def fetch_papers_by_query(
+        self, query: str, limit: int = 5
+    ) -> AsyncGenerator[DocumentMetadata, None]:
+
+        url = "https://export.arxiv.org/api/query"
+        query_params: dict[str, str | int] = {
+            "search_query": query,
+            "start": 0,
+            "max_results": limit
+        }
+
+        # 1. Open an asynchronous TCP connection to the arXiv servers
+        async with httpx.AsyncClient(follow_redirects=True) as client:
+            response = await client.get(url=url, params=query_params)
+            response.raise_for_status()
+
+        # 2. Parse the raw string into an XML AST
+        root = ET.fromstring(response.text)
+
+        # ... (XML Tree Traversal logic omitted for clarity) ...
+        # Assume we extracted `title' and `abstract' from the AST
+
+        # 3. Yield the pure Domain Entity
+        yield DocumentMetadata(
+            id=uuid.uuid4(),
+            title=title,
+            abstract=abstract
+        )
+\end{lstlisting}
+
+\textbf{Asynchronous Network I/O} \\
+The core of this method revolves around the \texttt{await client.get(...)} invocation. By explicitly passing our \texttt{query\_params} dictionary, \texttt{httpx} automatically constructs the correct URL-encoded query string and transmits the GET request. When the \texttt{await} keyword is hit, the Python interpreter suspends the execution of this specific function, hands control back to the asynchronous event loop, and performs other useful work while the bytes travel across the internet. When arXiv finally replies, \texttt{httpx} wakes the function back up. The \texttt{raise\_for\_status()} method mathematically guarantees we abort immediately if arXiv returns an error code (like a 404 or 500).
+
+\textbf{Memory Efficiency via Generators (\texttt{yield})} \\
+Notice the return type: \texttt{AsyncGenerator[DocumentMetadata, None]}. The method does \textit{not} return a standard Python \texttt{list}. If we were fetching 10,000 papers, creating a single massive list would consume gigabytes of RAM before returning a single result to the application.
+
+By using the \texttt{yield} keyword, this method becomes a Generator. As soon as a single XML node is parsed, it instantaneously yields one pure \texttt{DocumentMetadata} entity back to the caller, freezing its local state. Once the caller processes that document, the generator resumes and parses the next XML node.
+
+\textbf{Initializing the Domain Entity} \\
+Finally, observe the instantiation of the \texttt{DocumentMetadata} object. This is the exact moment the document "enters" our system. The worker dynamically assigns the cryptographically secure \texttt{uuid.uuid4()} in local RAM. Furthermore, notice that we pass \texttt{title} and \texttt{abstract}, but we do \textit{not} pass an \texttt{embedding}. Because this adapter's sole responsibility is network text retrieval, the vector attribute defaults to \texttt{None}. It will be explicitly populated later by the Machine Learning Adapter.
+
+
+
+
+
+
 
 \subsubsection*{9. The ML Adapter (\texttt{ml/sentence\_transformer.py})}
-% TODO: Implement the TextEmbeddingPort using HuggingFace models to generate the 768-dimensional vectors.
+
+With the \texttt{DocumentMetadata} successfully populated with text from the arXiv API, the final step in our pipeline is to generate the mathematical representation of that text. We must implement the \texttt{TextEmbeddingPort} defined in the Core Domain.
+
+To achieve this, we utilize \textbf{HuggingFace \texttt{SentenceTransformers}}. A standard Transformer model (like BERT) outputs a matrix of contextual vectors (one for every word in a sentence). \texttt{SentenceTransformers} adds a pooling layer to this architecture, mathematically averaging the word vectors to produce a single, dense vector that captures the overarching semantic meaning of the entire text.
+
+\begin{lstlisting}[caption={The Machine Learning Adapter}]
+import torch
+from sentence_transformers import SentenceTransformer
+from typing import Optional
+
+class HuggingFaceEmbeddingModel:
+    def __init__(
+        self,
+        model_name: str = "all-MiniLM-L6-v2",
+        device: Optional[str] = "cpu"
+    ):
+        self.device = device
+        self.model = SentenceTransformer(
+            model_name,
+            device=self.device
+        )
+
+    def generate_embedding(self, text: str) -> list[float]:
+        embedding = self.model.encode(text)
+        return embedding.tolist()
+\end{lstlisting}
+
+\textbf{Structural Subtyping (Duck Typing)} \\
+Notice a critical rule of our Hexagonal Architecture in this snippet: we do \textit{not} import or inherit from \texttt{TextEmbeddingPort}. Because the port was defined as a \texttt{typing.Protocol}, if our object simply exposes a \texttt{generate\_embedding} method with the exact matching input (\texttt{str}) and output (\texttt{list[float]}), the Python static type checker mathematically recognizes it as a valid adapter. This completely decouples the physical infrastructure from the core file.
+
+\textbf{Model Selection and Dimensionality} \\
+The \texttt{model\_name} parameter defines the exact neural network architecture loaded into memory. Our default, \texttt{all-MiniLM-L6-v2}, is a highly optimized model that compresses sentences into 384-dimensional vectors. It is fast and requires very little RAM. However, the adapter allows us to inject larger, domain-specific models (such as \texttt{allenai/scibert\_scivocab\_uncased}, optimized for academic papers), which might generate 768-dimensional vectors. The database (via \texttt{pgvector}) and the Repository must be strictly configured to match the mathematical dimensions output by the chosen model.
+
+\textbf{The Role of PyTorch (\texttt{torch}) and Hardware Acceleration} \\
+Although the explicit code is brief, \textbf{PyTorch} (\texttt{import torch}) is the foundational deep learning engine powering this entire adapter.
+\begin{itemize}
+    \item \textbf{Initialization:} When \texttt{SentenceTransformer} is instantiated, PyTorch physically allocates memory on the host machine. If \texttt{device="cuda"} is passed, PyTorch loads the massive matrix of neural weights directly into the GPU's VRAM. If \texttt{device="cpu"} is passed (or implicitly fallen back to), it loads into standard RAM.
+    \item \textbf{Execution (\texttt{.encode}):} When we call \texttt{encode(text)}, the library tokenizes the string and PyTorch executes billions of floating-point operations (matrix multiplications) to push the text through the neural network.
+    \item \textbf{The Boundary Translation (\texttt{.tolist()}):} The output of \texttt{.encode()} is a highly optimized C-array of floats (a \texttt{numpy.ndarray} or a PyTorch \texttt{Tensor}). However, our Protocol contract strictly mandates a pure Python \texttt{list[float]}. By calling \texttt{.tolist()}, we translate the C-array back into standard heap memory, ensuring the Core Domain is never contaminated by third-party deep learning dependencies.
+\end{itemize}
+
+
+
+
 
 \subsubsection*{10. The Distributed Workers (\texttt{worker/celery\_app.py} and \texttt{tasks.py})}
-% TODO: Explain how Celery acts as the asynchronous event loop, pulling jobs from Redis to execute the adapters across multiple hardware nodes.
+
+We have built the database, the network fetcher, and the machine learning model. However, we face a severe system architecture problem. If the main FastAPI web server attempts to download 1,000 academic papers and pass them sequentially through a 768-dimensional neural network, the HTTP request will block for minutes or even hours, resulting in a fatal network timeout and crashing the web server.
+
+To solve this, we must completely decouple the user interface from the heavy computation. We utilize \textbf{Celery}, an asynchronous distributed task queue, combined with \textbf{Redis}, an in-memory message broker.
+
+We begin by defining the global orchestrator in \texttt{celery\_app.py}:
+
+\begin{lstlisting}[caption={The Celery Application Orchestrator}]
+from celery import Celery
+
+celery_app = Celery(
+    "semantic_worker",
+    broker="redis://localhost:6379/0",
+    backend="redis://localhost:6379/0"
+)
+
+celery_app.conf.update(
+    task_serializer="json",
+    accept_content=["json"],
+    result_serializer="json",
+    timezone="UTC",
+    worker_prefetch_multiplier=1,
+)
+\end{lstlisting}
+
+\textbf{Defining the Orchestrator and the Redis Broker} \\
+When we instantiate the \texttt{Celery} object, we define the exact network paths for distributed communication:
+\begin{itemize}
+    \item \textbf{\texttt{"semantic\_worker"}:} The first positional argument is the logical name of the application. It acts as the internal namespace for the worker.
+    \item \textbf{\texttt{broker}:} This is the ``inbox.'' It points to our Redis instance. When a user requests an ingestion via the web API, the web server does not execute the work; it simply writes a lightweight message (e.g., ``Run Task X with Query Y'') to this Redis queue and immediately responds to the user. The idle background workers continuously monitor this broker to pull new jobs.
+    \item \textbf{\texttt{backend}:} This is the ``outbox.'' Once a worker finishes calculating the vector embeddings and saving to PostgreSQL, it writes the final success/failure state (and any return values) back to this Redis instance so the web server can eventually read the result.
+\end{itemize}
+
+\textbf{Security and Hardware Configurations} \\
+The \texttt{conf.update} block locks down the worker's execution environment. Historically, Python queues used \texttt{pickle} to serialize data, which poses a massive remote-code-execution security vulnerability. By strictly forcing \texttt{json} for all serialization, we mathematically guarantee that only pure data crosses the network boundary.
+
+Furthermore, the \texttt{worker\_prefetch\_multiplier=1} configuration is physically critical for machine learning workloads. By default, Celery workers eagerly pull multiple jobs from the broker into their local RAM to minimize network latency. However, because our worker initializes PyTorch and maps a heavy neural network into the GPU's VRAM, processing multiple pipelines simultaneously would instantly trigger an Out-Of-Memory (OOM) hardware crash. By restricting the multiplier to \texttt{1}, we strictly guarantee that each worker process only executes exactly one massive matrix multiplication workload at a time.
+
+\textbf{Task Execution: Process Isolation and Initialization} \\
+With the orchestrator configured, we move to \texttt{tasks.py}. We must first import our dependencies and initialize the adapters. Because the Celery worker runs in an entirely separate OS process from the FastAPI web server, it cannot share variables in RAM.
+
+\begin{lstlisting}[caption={Worker Imports and Isolated Initialization}]
+import os
+import asyncio
+from celery import shared_task
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+from infrastructure.worker.celery_app import celery_app
+from app_ingestion.workflows import fetch_and_store_papers
+from infrastructure.api.arxiv import ArxivClient
+from infrastructure.database.uow import SqlAlchemyUnitOfWork
+from infrastructure.ml.sentence_transformer import (
+    HuggingFaceEmbeddingModel,
+)
+
+worker_engine = create_engine(os.getenv("DATABASE_URL"))
+WorkerSessionFactory = sessionmaker(bind=worker_engine)
+
+api_client = ArxivClient()
+
+ml_model = HuggingFaceEmbeddingModel(
+    model_name="allenai/scibert_scivocab_uncased"
+)
+
+def get_worker_uow() -> SqlAlchemyUnitOfWork:
+    return SqlAlchemyUnitOfWork(WorkerSessionFactory)
+\end{lstlisting}
+
+Because of this strict process isolation, we must dynamically read the \texttt{DATABASE\_URL} and instantiate a completely isolated pool of TCP sockets strictly for the worker via \texttt{worker\_engine}. We also physically instantiate the network adapter (\texttt{ArxivClient}) and the PyTorch adapter (\texttt{HuggingFaceEmbeddingModel}). Notice that we intentionally upgrade the ML model to the larger 768-dimensional \texttt{scibert} for the heavy background job.
+
+\textbf{Task Execution: The Decorator and the Async Bridge} \\
+Finally, we define the executable function itself:
+
+\begin{lstlisting}[caption={The Executable Celery Task}]
+@celery_app.task(bind=True, name="ingest_papers_task")
+def ingest_papers_task(self, query: str, limit: int):
+
+    self.update_state(
+        state='PROGRESS',
+        meta={'status': 'Fetching and Embedding...'}
+    )
+
+    uow = get_worker_uow()
+
+    count = asyncio.run(
+        fetch_and_store_papers(
+            query=query,
+            api_client=api_client,
+            uow=uow,
+            ml_model=ml_model,
+            limit=limit
+        )
+    )
+
+    return {
+        "status": "COMPLETED",
+        "papers_ingested": count
+    }
+\end{lstlisting}
+
+Let us deconstruct this final execution block:
+\begin{itemize}
+    \item \textbf{The Task Decorator:} The \texttt{@celery\_app.task} decorator physically registers this Python function with the orchestrator we defined earlier.
+    \item \textbf{\texttt{bind=True}:} This parameter alters the function signature, automatically injecting the Celery task instance into the function as the first argument (\texttt{self}). This allows the executing code to dynamically communicate its progress back to the Redis backend (e.g., \texttt{self.update\_state(...)}).
+    \item \textbf{\texttt{name="ingest\_papers\_task"}:} Hardcoding the name prevents severe routing bugs if the file is ever moved or imported differently.
+    \item \textbf{The Synchronous/Asynchronous Bridge:} Celery tasks are fundamentally synchronous. However, our Core Domain workflow (\texttt{fetch\_and\_store\_papers}) relies heavily on asynchronous network I/O. By wrapping the execution in \texttt{asyncio.run()}, the worker creates an isolated, temporary event loop, executes the async pipeline to completion, and then cleanly shuts the loop down.
+\end{itemize}
+
+With this task defined, our Infrastructure Layer is officially complete. We have successfully mapped the persistent state to PostgreSQL, mathematical operations to the CPU/GPU, external networking to arXiv, and distributed parallelization to Redis.
+
+
+\subsubsection*{11. The Application Entry Point (\texttt{main.py})}
+
+The final step in mapping our Hexagonal Architecture is the Application layer. The \texttt{main.py} file serves as the primary execution locus. It acts as a lightweight HTTP router, translating incoming web requests into core domain commands.
+
+We begin by initializing the global infrastructure dependencies.
+
+\begin{lstlisting}[caption={Global Setup and Adapter Initialization}]
+import os
+from dotenv import load_dotenv
+from fastapi import FastAPI, Depends, status
+from contextlib import asynccontextmanager
+
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+from semantic_engine.infrastructure.database.uow import SqlAlchemyUnitOfWork
+from semantic_engine.infrastructure.ml.sentence_transformer import (
+    HuggingFaceEmbeddingModel
+)
+from semantic_engine.infrastructure.database.models import Base
+
+load_dotenv()
+
+engine = create_engine(os.getenv("DATABASE_URL"))
+SessionFactory = sessionmaker(bind=engine)
+
+ml_model = HuggingFaceEmbeddingModel(
+    model_name="allenai/scibert_scivocab_uncased"
+)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    Base.metadata.create_all(engine)
+    yield
+
+app = FastAPI(title="Semantic Document Engine", lifespan=lifespan)
+
+def get_uow():
+    return SqlAlchemyUnitOfWork(SessionFactory)
+\end{lstlisting}
+
+\textbf{Global Initialization and The Database Engine} \\
+When the \texttt{main.py} module is evaluated by the Python interpreter, it immediately initializes our global infrastructure dependencies. The most critical of these is \texttt{create\_engine}.
+
+The \textbf{\texttt{Engine}} is the lowest-level \texttt{SQLAlchemy} object the application interacts with. It acts as a global singleton registry that manages two fundamental systems:
+\begin{itemize}
+    \item \textbf{The Dialect:} It holds the translation rules, instructing the underlying Python driver (\texttt{psycopg}) exactly how to format binary network packets for PostgreSQL.
+    \item \textbf{The Connection Pool:} As discussed in the Unit of Work section, it pre-authenticates and permanently holds open a batch of TCP network sockets. Because the \texttt{engine} variable is declared at the module level, these sockets persist in RAM for the entire lifetime of the web server.
+\end{itemize}
+
+Directly beneath the Engine, we define the \textbf{\texttt{sessionmaker}}. By passing \texttt{bind=engine}, we strictly couple this factory to our global pool. When FastAPI later calls \texttt{get\_uow()} to inject the Unit of Work into a web route, the UoW uses this factory to instantly "check out" one of those pre-opened TCP sockets without incurring any network handshake latency.
+
+Notice that we also instantiate the \texttt{HuggingFaceEmbeddingModel} directly in the web server's RAM. Earlier, we established that neural networks are too heavy for web servers. However, this rule applies specifically to \textit{ingesting} massive documents. When a user queries the engine for a search (e.g., "quantum mechanics"), we must instantly convert that 2-word string into a vector. Executing a forward pass on a tiny, 2-word string takes milliseconds and can safely occur synchronously on the web server without causing a network timeout.
+
+\textbf{The ASGI Lifespan Context Manager} \\
+Before a modern web server (like \texttt{uvicorn}) opens its HTTP port to accept public network traffic, it must ensure the underlying infrastructure is strictly ready. FastAPI handles this via the \texttt{lifespan} asynchronous context manager, which hooks directly into the ASGI (Asynchronous Server Gateway Interface) boot sequence.
+
+\begin{itemize}
+    \item \textbf{The Boot Sequence (Before \texttt{yield}):} When the server starts, it enters this function. The \texttt{Base.metadata.create\_all(engine)} command performs a deterministic physical check. It inspects the PostgreSQL disk via the Engine; if the tables defined by our Python models do not exist, it automatically compiles and executes the \texttt{CREATE TABLE} SQL commands.
+    \item \textbf{The Execution State (\texttt{yield}):} The \texttt{yield} keyword mathematically suspends the function. This acts as a green-light signal to FastAPI, confirming that the infrastructure is successfully mapped. FastAPI then opens the HTTP port and begins routing user traffic.
+    \item \textbf{The Teardown Sequence (After \texttt{yield}):} When the server administrator sends a \texttt{SIGTERM} kill signal to shut down the application, FastAPI stops accepting new web traffic and unfreezes the \texttt{lifespan} function. Any code written after the \texttt{yield} will execute, allowing the application to gracefully close the machine learning models and cleanly sever the TCP sockets before the operating system forcefully kills the Python process.
+\end{itemize}
+
+
+
+\textbf{Asynchronous Task Offloading} \\
+With the server running, we define the endpoints to ingest new academic papers:
+
+\begin{lstlisting}[caption={Task Offloading and Status Polling}]
+from celery.result import AsyncResult
+from semantic_engine.infrastructure.worker.tasks import ingest_papers_task
+from semantic_engine.infrastructure.worker.celery_app import celery_app
+
+@app.post("/ingest/", status_code=status.HTTP_202_ACCEPTED)
+async def ingest_papers(query: str, limit: int = 5):
+
+    task = ingest_papers_task.delay(query, limit)
+
+    return {
+        "message": "Ingestion job submitted successfully.",
+        "task_id": task.id,
+        "status_url": f"/tasks/{task.id}"
+    }
+
+@app.get("/tasks/{task_id}")
+async def get_task_status(task_id: str):
+
+    task_result = AsyncResult(task_id, app=celery_app)
+    response = {"task_id": task_id, "status": task_result.status}
+
+    if task_result.state == 'SUCCESS':
+        response["result"] = task_result.result
+    elif task_result.state == 'FAILURE':
+        response["error"] = str(task_result.info)
+
+    return response
+\end{lstlisting}
+
+When a user triggers \texttt{/ingest/}, the web server does not execute the pipeline. Instead, it calls \texttt{ingest\_papers\_task.delay(query, limit)}. The \texttt{.delay()} method is the physical bridge to the Message Broker; it serializes the arguments into JSON and pushes them onto the Redis queue. The server instantly returns an \texttt{HTTP 202 ACCEPTED} response containing the \texttt{task\_id}, freeing up the TCP socket to serve other users. The client can then continuously poll the \texttt{/tasks/\{task\_id\}} endpoint, which queries Redis for real-time progress updates.
+
+\textbf{Real-Time Vector Search and Dependency Injection} \\
+Finally, we expose the \texttt{/search/} endpoint to perform the actual K-Nearest Neighbors mathematical lookup:
+
+\begin{lstlisting}[caption={Dependency Injection and Semantic Search}]
+from typing import List, Dict, Any
+from pydantic import BaseModel
+
+class SearchResult(BaseModel):
+    title: str
+    abstract: str
+    distance: float
+
+@app.get("/search/", response_model=dict)
+async def search_papers(
+    query: str,
+    limit: int = 5,
+    uow: SqlAlchemyUnitOfWork = Depends(get_uow)
+):
+    query_vector = ml_model.embed_text(query)
+
+    with uow:
+        results = uow.doc_repo.search_by_embedding(query_vector, limit)
+
+    formatted_results = [
+        SearchResult(title=doc.title, abstract=doc.abstract, distance=dist)
+        for doc, dist in results
+    ]
+
+    return {"query": query, "results": formatted_results}
+\end{lstlisting}
+
+This endpoint represents the perfect synthesis of our architecture:
+\begin{itemize}
+    \item \textbf{Dependency Injection:} The \texttt{Depends(get\_uow)} syntax instructs FastAPI to execute the factory function and inject a localized, fully instantiated Unit of Work into the route.
+    \item \textbf{Execution:} The controller embeds the user's query via the ML adapter, opens the database transaction block (\texttt{with uow:}), and executes the SIMD vector search.
+    \item \textbf{Boundary Translation (Pydantic):} The Repository returns pure \texttt{DocumentMetadata} Domain entities. The router unpacks these mathematical entities and repackages them into \texttt{SearchResult} objects. \texttt{Pydantic} then serializes these objects into secure JSON bytes for network transmission back to the user.
+\end{itemize}

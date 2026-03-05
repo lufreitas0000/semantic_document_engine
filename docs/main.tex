@@ -38,6 +38,10 @@
 \definecolor{CodeGold}{HTML}{B08800}    % Functions and Class Names
 
 % --- Syntax Highlighting (Listings) ---
+% Required to supply the underlying ASCII 0x27 mapping vectors
+\usepackage{textcomp}
+% Overrides the listings lexical analyzer to prevent smart-quote coercion
+\usepackage{upquote}
 \usepackage{listings}
 \lstset{
     language=Python,
@@ -46,6 +50,7 @@
     showstringspaces=false,
     breaklines=false,
     frame=single,
+    upquote=true, % INJECTED: Coerces literal ASCII 0x27 mapping for string literals and comments
     rulecolor=\color{LightBlue!50},
     numbers=left,
     numberstyle=\tiny\color{CodeComment},
@@ -53,21 +58,32 @@
     belowskip=1em,
     xleftmargin=1em,
     framexleftmargin=1em,
-    commentstyle=\color{CodeComment}\itshape,
+    commentstyle=\color{CodeComment}\itshape, % Italic state is preserved; upquote handles the faulting glyph
     stringstyle=\color{CodeGreen},
-    % Base Keywords (Purple)
+    % Base Keywords (Purple - Handled automatically by language=Python)
     keywordstyle=\color{CodePurple}\bfseries,
-    % Types (Green)
+    % Types & Annotations (Green)
     classoffset=1,
-    morekeywords={list, float, int, str, dict, Protocol},
+    morekeywords={list, float, int, str, dict, bool, Protocol, UUID, Any, Self, Optional, AsyncGenerator, Mapped, Dict, List, BaseModel},
     keywordstyle=\color{CodeGreen},
-    % Arguments (Light Blue)
+    % Arguments & Variables (Light Blue)
     classoffset=2,
-    morekeywords={self, doc\_id, args, kwargs},
+    morekeywords={self, doc_id, args, kwargs, query, limit, session, document, query_vector, text, model_name, device, app, exc_type, exc_val, exc_tb, cls},
     keywordstyle=\color{CodeBlue},
-    % Functions & Custom Classes (Gold)
+    % Functions, Custom Classes, & External Libraries (Gold)
     classoffset=3,
-    morekeywords={get\_vector, DocumentRepository, PgVectorRepository},
+    morekeywords={
+        % Core Domain
+        get_vector, DocumentRepository, PgVectorRepository, DocumentMetadata, AbstractUnitOfWork, AcademicGraphPort, TextEmbeddingPort,
+        % Infrastructure & DB
+        SqlAlchemyDocumentRepository, SqlAlchemyUnitOfWork, DocumentRecord, Base, sessionmaker, create_engine, select, mapped_column,
+        % Types & SQLAlchemy Dialects
+        Vector, PG_UUID, String, Text, ARRAY, DateTime,
+        % Adapters & ML
+        ArxivClient, HuggingFaceEmbeddingModel, SentenceTransformer,
+        % Network & Async
+        Celery, FastAPI, AsyncClient, AsyncResult, Depends, asynccontextmanager, update_state
+    },
     keywordstyle=\color{CodeGold},
     classoffset=0 % Reset to default
 }
@@ -108,7 +124,7 @@
 \date{\today}
 
 
-\includeonly{chapter1_architecture/ch1_main}
+%\includeonly{chapter1_architecture/ch1_main}
 
 
 \begin{document}
@@ -120,47 +136,46 @@ Mapping natural language to high-dimensional metric spaces to quantify temporal 
 \end{abstract}
 
 \tableofcontents
-\include{introduction/introduction}
+\input{introduction/introduction}
 \chapter{Theoretical Foundations \& Architecture}
-\include{chapter1_architecture/ch1_main}
+\input{chapter1_architecture/ch1_main}
 
-% \chapter{Theoretical Foundations \& Architecture}
-% \section{Hexagonal Architecture \& DIP}
-% Isolating pure mathematical logic from I/O boundary conditions.
-% \section{The Dependency Graph}
-% \section{Version Control \& CI/CD}
-% \section{Glossary of Mechanics}
 
-% \chapter{The Core Domain}
-% \section{Set Theory in Python}
-% \section{Polymorphism}
-% \section{The Unit of Work (UoW) Pattern}
-% \section{Test-Driven Development (TDD)}
+\section{The Dependency Graph}
+\section{Version Control \& CI/CD}
+\section{Glossary of Mechanics}
 
-% \chapter{Infrastructure I/O \& Compute Segregation}
-% \section{Network \& Storage Primer}
-% \section{Relational Algebra}
-% \section{Overcoming the Python GIL}
-% \section{Process Memory}
+\chapter{The Core Domain}
+\section{Set Theory in Python}
+\section{Polymorphism}
+\section{The Unit of Work (UoW) Pattern}
+\section{Test-Driven Development (TDD)}
 
-% \chapter{The Presentation Layer}
-% \section{Multiplexing TCP Sockets}
-% \section{Hypermedia REST}
-% \section{Eliminating the Virtual DOM}
-% \section{Data Streaming}
+\chapter{Infrastructure I/O \& Compute Segregation}
+\section{Network \& Storage Primer}
+\section{Relational Algebra}
+\section{Overcoming the Python GIL}
+\section{Process Memory}
 
-% \chapter{Machine Learning}
-% \section{Text to Vectors}
-% \section{Vector Search}
-% \section{Distance Metrics}
-% \section{Manifold Theory}
-% \section{Signal Processing}
+\chapter{The Presentation Layer}
+\section{Multiplexing TCP Sockets}
+\section{Hypermedia REST}
+\section{Eliminating the Virtual DOM}
+\section{Data Streaming}
 
-% \chapter*{Conclusion}
-% \addcontentsline{toc}{chapter}{Conclusion}
+\chapter{Machine Learning}
+\section{Text to Vectors}
+\section{Vector Search}
+\section{Distance Metrics}
+\section{Manifold Theory}
+\section{Signal Processing}
+
+\chapter*{Conclusion}
+\addcontentsline{toc}{chapter}{Conclusion}
 
 
 % --- Bibliography ---
+\nocite{*}
 \bibliographystyle{plain}
 \bibliography{references}
 

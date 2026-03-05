@@ -1,3 +1,36 @@
-\begin{thebibliography}{}
+\begin{thebibliography}{1}
+
+\bibitem{Bamman2014}
+David Bamman, Chris Dyer, and Noah~A. Smith.
+\newblock Distributed representations of geographically situated language.
+\newblock In Kristina Toutanova and Hua Wu, editors, {\em Proceedings of the 52nd Annual Meeting of the Association for Computational Linguistics (Volume 2: Short Papers)}, pages 828--834, Baltimore, Maryland, June 2014. Association for Computational Linguistics.
+
+\bibitem{Church2017}
+K.~W. CHURCH.
+\newblock Word2vec.
+\newblock {\em Natural Language Engineering}, 23(1):155--162, 2017.
+
+\bibitem{Price1965}
+Derek~J. de~Solla~Price.
+\newblock Networks of scientific papers.
+\newblock {\em Science}, 149:510--515, 1965.
+
+\bibitem{Fortunato2018}
+S.~Fortunato, C.~T. Bergstrom, K.~Börner, J.~A. Evans, D.~Helbing, S.~Milojević, A.~M. Petersen, F.~Radicchi, R.~Sinatra, B.~Uzzi, A.~Vespignani, L.~Waltman, D.~Wang, and A.~L. Barabási.
+\newblock Science of science.
+\newblock {\em Science}, 359(6379):eaao0185, Mar 2 2018.
+\newblock PMID: 29496846; PMCID: PMC5949209.
+
+\bibitem{Hamilton2018}
+William~L. Hamilton, Jure Leskovec, and Dan Jurafsky.
+\newblock Diachronic word embeddings reveal statistical laws of semantic change, 2018.
+
+\bibitem{Kutuzov2018}
+Andrey Kutuzov, Lilja Øvrelid, Terrence Szymanski, and Erik Velldal.
+\newblock Diachronic word embeddings and semantic shifts: a survey, 2018.
+
+\bibitem{Schakel2015}
+Adriaan M.~J. Schakel and Benjamin~J. Wilson.
+\newblock Measuring word significance using distributed representations of words, 2015.
 
 \end{thebibliography}
